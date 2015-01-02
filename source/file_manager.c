@@ -6114,7 +6114,7 @@ int file_manager(char *pathw1, char *pathw2)
                      strcmp(entries2[sel2].d_name, "game") == SUCCESS ||
                      strcmp(entries2[sel2].d_name, "GAMES") == SUCCESS ||
                      strcmp(entries2[sel2].d_name, "GAMEZ") == SUCCESS ||
-                     (strstr(path2, "/PS3ISO") != NULL &&
+                     (strstr(path2, "/PS3ISO")  != NULL &&
                      (!strcmpext(entries2[sel2].d_name, ".iso") || !strcmpext(entries2[sel2].d_name, ".iso.0")))
                    )) max_menu2 = 9;
 
@@ -6936,13 +6936,30 @@ int file_manager(char *pathw1, char *pathw2)
                  else
                     sprintf(temp_buffer, "%s/%s", path2, entries2[sel2].d_name);
 
-                 if(strcmp(temp_buffer + strlen(temp_buffer) - 4, ".iso")   == SUCCESS ||
-                    strcmp(temp_buffer + strlen(temp_buffer) - 4, ".ISO")   == SUCCESS ||
-                    strcmp(temp_buffer + strlen(temp_buffer) - 4, ".iso.0") == SUCCESS ||
-                    strcmp(temp_buffer + strlen(temp_buffer) - 4, ".ISO.0") == SUCCESS)
+                 if(strcasecmp(temp_buffer + strlen(temp_buffer) - 4, ".iso")   == SUCCESS ||
+                    strcasecmp(temp_buffer + strlen(temp_buffer) - 6, ".iso.0") == SUCCESS)
+                 {
                      patchps3iso(temp_buffer, 0);
+                 }
                  else
-                     patch_error_09(temp_buffer);
+                 {
+                    pause_music(1);
+                    patch_error_09(temp_buffer);
+
+                    DCls();
+                     if(!fm_pane)
+                        FixDirectory(path1, 0);
+                     else
+                        FixDirectory(path2, 0);
+                    DCls();
+
+                    msgDialogAbort();
+                    msgDialogClose(0);
+
+                    pause_music(0);
+
+                    patch_error_09(temp_buffer);
+                 }
 
             } // fix game
 

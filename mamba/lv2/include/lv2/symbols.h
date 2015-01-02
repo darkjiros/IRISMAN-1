@@ -1742,6 +1742,7 @@
 
 #elif defined(FIRMWARE_4_31) //Ported by Joonie, Big thanks to aldostools for his awesome getsymbol tool :)
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x348210 //done
 
 #define open_shared_kernel_object_symbol            0x123FC // bytes matched: 0x80  F821FF317C0802A6FB8100B0FBC100C0FBE100C8F80100E0789C84027CE03B78
@@ -1888,6 +1889,7 @@
 
 #elif defined(FIRMWARE_4_40) // Ported by Joonie Big thanks to @Aldostools for his amazing getsymbol tool, special thanks to @Estwald who is the original creater of this payload
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x3487D0 //done
 
 #define open_shared_kernel_object_symbol            0x12470 // bytes matched: 0x80  F821FF317C0802A6FB8100B0FBC100C0FBE100C8F80100E0789C84027CE03B78
@@ -2033,6 +2035,7 @@
 
 #elif defined(FIRMWARE_4_41) // Ported by Joonie, Big thanks to @aldostools for his awesome getsymbol tool :) and @Estwald for his original port of mamba.
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x3487E0 //done
 
 #define open_shared_kernel_object_symbol            0x12474 // bytes matched: 0x80  F821FF317C0802A6FB8100B0FBC100C0FBE100C8F80100E0789C84027CE03B78
@@ -2748,7 +2751,7 @@
 
 //#define thread_rtoc_entry_1                       -0x76C0
 
-//#define process_rtoc_entry_1                      -0x7800
+#define process_rtoc_entry_1                      -0x7800
 
 //#define bt_rtoc_entry_1                           -0x35D8
 
@@ -2927,6 +2930,7 @@
 
 #elif defined(FIRMWARE_4_50) //Ported by Joonie, Big thanks to @aldostools for his awesome Getsymbols tool, and also Thanks a lot to @Estwald who is the creator of this Mamba payload!!
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x34B160 //done
 
 #define open_shared_kernel_object_symbol            0x12470 // bytes matched: 0x80  F821FF317C0802A6FB8100B0FBC100C0FBE100C8F80100E0789C84027CE03B78
@@ -3234,6 +3238,7 @@
 
 #elif defined(FIRMWARE_4_53)
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x34B2E0
 
 #define open_shared_kernel_object_symbol            0x12474
@@ -3552,6 +3557,7 @@
 
 #elif defined(FIRMWARE_4_55)
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x34E620
 
 #define open_shared_kernel_object_symbol            0x12484 // y
@@ -3854,6 +3860,7 @@
 
 #elif defined(FIRMWARE_4_60)
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x34F950 //done
 
 #define open_shared_kernel_object_symbol            0x1240C // bytes matched: 0x80  F821FF317C0802A6FB8100B0FBC100C0FBE100C8F80100E0789C84027CE03B78
@@ -3999,6 +4006,7 @@
 
 #elif defined(FIRMWARE_4_65) //Ported by Joonie, Big thanks to @aldostools for his Getsymbol tool :)
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x34F960 //done
 
 #define open_shared_kernel_object_symbol            0x12410 // bytes matched: 0x80  F821FF317C0802A6FB8100B0FBC100C0FBE100C8F80100E0789C84027CE03B78
@@ -4293,6 +4301,7 @@
 
 #elif defined(FIRMWARE_4_66) //Ported by Joonie, Big thanks to @aldostools for his Getsymbol tool :)
 
+#define process_rtoc_entry_1				-0x7800 //
 #define TOC                                         0x34F960 //done
 
 #define open_shared_kernel_object_symbol            0x12410 // bytes matched: 0x80  F821FF317C0802A6FB8100B0FBC100C0FBE100C8F80100E0789C84027CE03B78

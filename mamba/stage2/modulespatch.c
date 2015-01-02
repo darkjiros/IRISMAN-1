@@ -879,12 +879,12 @@ LV2_HOOKED_FUNCTION_POSTCALL_7(void, pre_map_process_memory, (void *object, uint
 	// Not the call address, but the call to the caller (process load code for .self)
 	if (get_call_address(1) == (void *)MKA(process_map_caller_call))
 	{
-		if (process_addr == 0x10000 && size == vsh_text_size  && vsh_text_size && flags == 0x2008004)
+		if (process_addr == 0x10000 && flags == 0x2008004)//EDIT PS3API!
 		{
-			// Change flags, RX -> RWX, make vsh text writable
+			// Change flags, RX -> RWX, make process text writable for all processes (not only vsh) //EDIT PS3API!
 			set_patched_func_param(4, 0x2004004);
-			// We don't need this hook anymore. 
-			unhook_and_clear();
+			// We don't need this hook anymore. //EDIT PS3API! We always need it !!!
+			//unhook_and_clear(); //EDIT PS3API!
 		}
 	}	
 }

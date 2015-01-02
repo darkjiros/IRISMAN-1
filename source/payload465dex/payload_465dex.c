@@ -110,7 +110,22 @@ int is_firm_465dex(void)
     // TOC 4.65
    u64 toc;
    toc =peekq(0x8000000000003000ULL);
-   if(toc == 0x8000000000375510ULL)
+   if(toc == 0x8000000000375510ULL && peekq(0x800000000031EBA8ULL)!=0x323031342F31312FULL)
+   {
+      return 1;
+   }
+   else
+   {
+      return 0;
+   }
+}
+
+int is_firm_466dex(void)
+{
+    // TOC 4.66
+   u64 toc;
+   toc =peekq(0x8000000000003000ULL);
+   if(toc == 0x8000000000375510ULL && peekq(0x800000000031EBA8ULL)==0x323031342F31312FULL)
    {
       return 1;
    }
@@ -192,10 +207,10 @@ static inline void install_lv2_memcpy()
     for(n = 0; n < 50; n++) {
     /* install memcpy */
     /* This does not work on some PS3s */
-        pokeq(NEW_POKE_SYSCALL_ADDR, 0x4800000428250000ULL);
-        pokeq(NEW_POKE_SYSCALL_ADDR + 8, 0x4182001438a5ffffULL);
-        pokeq(NEW_POKE_SYSCALL_ADDR + 16, 0x7cc428ae7cc329aeULL);
-        pokeq(NEW_POKE_SYSCALL_ADDR + 24, 0x4bffffec4e800020ULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x00, 0x4800000428250000ULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x08, 0x4182001438a5ffffULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x10, 0x7cc428ae7cc329aeULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x18, 0x4bffffec4e800020ULL);
         usleep(5000);
     }
 }
@@ -210,10 +225,10 @@ static inline void remove_lv2_memcpy()
     /* restore syscall */
     //remove_new_poke();
 
-        pokeq(NEW_POKE_SYSCALL_ADDR, 0xF821FF017C0802A6ULL);
-        pokeq(NEW_POKE_SYSCALL_ADDR + 8, 0xFBC100F0FBE100F8ULL);
-        pokeq(NEW_POKE_SYSCALL_ADDR + 16, 0xEBC2FF407C7F1B78ULL);
-        pokeq(NEW_POKE_SYSCALL_ADDR + 24, 0x3860032DFBA100E8ULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x00, 0xF821FF017C0802A6ULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x08, 0xFBC100F0FBE100F8ULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x10, 0xEBC2FF407C7F1B78ULL);
+        pokeq(NEW_POKE_SYSCALL_ADDR + 0x18, 0x3860032DFBA100E8ULL);
         usleep(5000);
     }
 }
@@ -230,10 +245,10 @@ void load_payload_465dex (int mode)
 {
     if(bEnableLv2_memprot_patch) // changed offset: 0x377828 -> 0x370F28
     {   //Remove Lv2 memory protection
-        lv1poke(0x370F28     , 0x0000000000000001ULL); // Original: 0x0000000000351FD8ULL
-        lv1poke(0x370F28 + 8 , 0xE0D251B556C59F05ULL); // Original: 0x3B5B965B020AE21AULL
-        lv1poke(0x370F28 + 16, 0xC232FCAD552C80D7ULL); // Original: 0x7D6F60B118E2E81BULL
-        lv1poke(0x370F28 + 24, 0x65140CD200000000ULL); // Original: 0x315D8B7700000000ULL
+        lv1poke(0x370F28 + 0x00, 0x0000000000000001ULL); // Original: 0x0000000000351FD8ULL
+        lv1poke(0x370F28 + 0x08, 0xE0D251B556C59F05ULL); // Original: 0x3B5B965B020AE21AULL
+        lv1poke(0x370F28 + 0x10, 0xC232FCAD552C80D7ULL); // Original: 0x7D6F60B118E2E81BULL
+        lv1poke(0x370F28 + 0x18, 0x65140CD200000000ULL); // Original: 0x315D8B7700000000ULL
     }
 
     install_lv2_memcpy();
@@ -280,11 +295,16 @@ void load_payload_465dex (int mode)
         pokeq(0x800000000005E028ULL, 0x2F83000060000000ULL ); // fix 80010009 error  Original: 0x2F830000419E00ACULL
         pokeq(0x800000000005E03CULL, 0x2F83000060000000ULL ); // fix 80010009 error  Original: 0x2F830000419E00ACULL
 
-        pokeq(0x800000000005962CULL, 0xF821FE917C0802A6ULL );
-        pokeq(0x8000000000059654ULL, 0x6000000060000000ULL );
-        pokeq(0x800000000005965CULL, 0x600000003BA00000ULL );
+        if(file_exists("/dev_flash/rebug")==false || bEnableLv2_webman_patch==3)
+        {
+            pokeq(0x800000000005962CULL, 0xF821FE917C0802A6ULL );
+            pokeq(0x8000000000059654ULL, 0x6000000060000000ULL );
+            pokeq(0x800000000005965CULL, 0x600000003BA00000ULL );
+        }
 
         pokeq(0x800000000005C780ULL, 0x60000000E8610098ULL );
+
+        if(bEnableLv2_webman_patch>=2) bEnableLv2_habib_patch=0;
     }
 
     if((bEnableLv2_habib_patch == 11) || (bEnableLv2_habib_patch == 2))

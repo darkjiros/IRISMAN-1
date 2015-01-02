@@ -35,15 +35,14 @@ Credits:
 #include "file_manager.h"
 #include "ftp/functions.h"
 
-#define FS_S_IFMT 0170000
-#define FS_S_IFDIR 0040000
-
 //---
 #define USB_MASS_STORAGE_1(n)	(0x10300000000000AULL+(n)) /* For 0-5 */
 #define USB_MASS_STORAGE_2(n)	(0x10300000000001FULL+((n)-6)) /* For 6-127 */
 #define USB_MASS_STORAGE(n)	(((n) < 6) ? USB_MASS_STORAGE_1(n) : USB_MASS_STORAGE_2(n))
 
 #define MAX_SECTIONS	((0x10000-sizeof(rawseciso_args))/8)
+
+#define cue_buf  plugin_args
 
 enum DiscEmu
 {
@@ -583,6 +582,8 @@ int fix_PS3_EXTRA_attribute(char *path)
     unsigned char *mem = NULL;
 
     sprintf(filepath, "%s/PS3_GAME/PARAM.SFO", path);
+    if(!is_ntfs_path(filepath)) sysLv2FsChmod(filepath, FS_S_IFMT | 0777);
+
     if(!sysLv2FsOpen(filepath, 0, &fd, S_IREAD | S_IRGRP | S_IROTH, NULL, 0))
     {
         sysLv2FsLSeek64(fd, 0, 2, &position);
@@ -817,29 +818,32 @@ int edit_title_param_sfo(char * file)
                     for(int i = 0; title_name[i] && (i < 64); i++) mem[pos + i] = title_name[i];
                     ct++;
                 }
-                else if(more && !strncmp((char *) &mem[str], "TITLE_ID", 8))
+                else if(more)
                 {
-                    title_id[9] = 0;
-                    for(int i = 0; title_id[i] && (i < 10); i++) mem[pos + i] = title_id[i];
-                    ct++;
-                }
-                else if(more && !strncmp((char *) &mem[str], "PS3_SYSTEM_VER", 14))
-                {
-                    ps3_sys_ver[7] = 0;
-                    for(int i = 0; ps3_sys_ver[i] && (i < 7); i++) mem[pos + i] = ps3_sys_ver[i];
-                    ct++;
-                }
-                else if(more && !strncmp((char *) &mem[str], "SUB_TITLE", 9))
-                {
-                    sub_title[127] = 0;
-                    for(int i = 0; sub_title[i] && (i < 128); i++) mem[pos + i] = sub_title[i];
-                    ct++;
-                }
-                else if(more && !strncmp((char *) &mem[str], "SAVEDATA_DIRECTORY", 18))
-                {
-                    savedata_directory[63] = 0;
-                    for(int i = 0; savedata_directory[i] && (i < 64); i++) mem[pos + i] = savedata_directory[i];
-                    ct++;
+                    if(!strncmp((char *) &mem[str], "TITLE_ID", 8))
+                    {
+                        title_id[9] = 0;
+                        for(int i = 0; title_id[i] && (i < 10); i++) mem[pos + i] = title_id[i];
+                        ct++;
+                    }
+                    else if(!strncmp((char *) &mem[str], "PS3_SYSTEM_VER", 14))
+                    {
+                        ps3_sys_ver[7] = 0;
+                        for(int i = 0; ps3_sys_ver[i] && (i < 7); i++) mem[pos + i] = ps3_sys_ver[i];
+                        ct++;
+                    }
+                    else if(!strncmp((char *) &mem[str], "SUB_TITLE", 9))
+                    {
+                        sub_title[127] = 0;
+                        for(int i = 0; sub_title[i] && (i < 128); i++) mem[pos + i] = sub_title[i];
+                        ct++;
+                    }
+                    else if(!strncmp((char *) &mem[str], "SAVEDATA_DIRECTORY", 18))
+                    {
+                        savedata_directory[63] = 0;
+                        for(int i = 0; savedata_directory[i] && (i < 64); i++) mem[pos + i] = savedata_directory[i];
+                        ct++;
+                    }
                 }
 
                 if(ct >= (more ? 3 : 1)) break;
@@ -1293,6 +1297,8 @@ int patch_exe_error_09(char *path_exe)
     u16 ver = 0;
     int file = -1;
     int flag = 0; //not patched
+
+    if(!is_ntfs_path(path_exe)) sysLv2FsChmod(path_exe, FS_S_IFMT | 0777);
 
     // open self/sprx and changes the fw version
     ret = sysLv2FsOpen( path_exe, SYS_O_RDWR, &file, 0, NULL, 0 );
@@ -2191,14 +2197,14 @@ int fill_iso_entries_from_device(char *path, u32 flag, t_directories *list, int 
 
                             if(fd >= 0)
                             {
-                                int r = ps3ntfs_read(fd, (char *)plugin_args, sizeof(plugin_args));
+                                int r = ps3ntfs_read(fd, (char *)cue_buf, sizeof(cue_buf));
                                 ps3ntfs_close(fd);
 
                                 if (r > 0)
                                 {
                                     char dummy[64];
 
-                                    if (cobra_parse_cue(plugin_args, r, tracks, 100, &num_tracks, dummy, sizeof(dummy)-1) != 0)
+                                    if (cobra_parse_cue(cue_buf, r, tracks, 100, &num_tracks, dummy, sizeof(dummy)-1) != 0)
                                     {
                                         num_tracks=1;
                                         cue=0;

@@ -2546,9 +2546,9 @@ int payload_mode = 0;
 
 int load_from_bluray = 0;
 
-#ifndef LOADER_MODE
+//#ifndef LOADER_MODE
 static char filename[MAXPATHLEN];
-#endif
+//#endif
 
 /******************************************************************************************************************************************************/
 
@@ -3453,6 +3453,15 @@ s32 main(s32 argc, const char* argv[])
         off_psid  = off_idps2 + 0x18ULL;
         payload_mode = is_payload_loaded_465();
     }
+    else if(is_firm_466dex())
+    {
+        firmware  = 0x466D;
+        //fw_ver    = 0xB5A4;
+        off_idps  = 0x80000000004095B0ULL; // The same as 4.60-4.65 CEX
+        off_idps2 = 0x800000000049CF1CULL;
+        off_psid  = off_idps2 + 0x18ULL;
+        payload_mode = is_payload_loaded_465dex();
+    }
 
     if(is_cobra_based()) use_cobra = true;
 
@@ -3899,6 +3908,7 @@ s32 main(s32 argc, const char* argv[])
             }
             break;
         case 0x465D:
+        case 0x466D:
             set_bdvdemu_465dex(payload_mode);
             switch(payload_mode)
             {
@@ -4372,6 +4382,41 @@ s32 main(s32 argc, const char* argv[])
 
         if(!(strcasestr(directories[currentgamedir].path_name, ".iso") && file_exists("/dev_hdd0/game/IRISMAN00/sprx_iso") == false))
             strcpy(self_path, "/dev_hdd0/game/IRISMAN00");
+
+        if(strstr(directories[currentgamedir].path_name, "/ntfs"))
+        {
+            {
+                // NTFS Automount
+                for(int i = 0; i < 8; i++)
+                {
+                    {   // mount device
+                        NTFS_UnMount(i);
+                        mounts[i] = NULL;
+                        mountCount[i] = 0;
+
+                        mountCount[i] = ntfsMountDevice(disc_ntfs[i], &mounts[i], NTFS_DEFAULT | NTFS_RECOVER);
+
+                        if(autolaunch == LAUNCHMODE_CHECKED)
+                        {
+                            autolaunch = LAUNCHMODE_REFRESH;
+                        }
+                    }
+                }
+                // NTFS Automount
+            }
+
+            // NTFS/EXTx
+            if(/*noBDVD == MODE_DISCLESS &&*/ use_cobra && mode_homebrew != HOMEBREW_MODE)
+            {
+                u32 ports_plug_cnt = 0;
+                signal_ntfs_mount = false;
+                for(find_device = 0; find_device < 8; find_device++)
+                {
+                    if(automountCount[find_device] > 0) signal_ntfs_mount = true;
+                    if(mountCount[find_device]) ports_plug_cnt|= 1<<find_device; else ports_plug_cnt&= ~(1<<find_device);
+                }
+            }
+        }
 
         mode_favourites = 0;
         menu_screen = SCR_MAIN_GAME_LIST;

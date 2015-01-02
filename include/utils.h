@@ -69,6 +69,9 @@ typedef struct {
 #define HOMEBREW_MODE 2
 #define VIDEOS_MODE   3
 
+#define FS_S_IFMT 0170000
+#define FS_S_IFDIR 0040000
+
 //#define PSDEBUG 1
 
 #define SC_SYS_POWER 					(379)

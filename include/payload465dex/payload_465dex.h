@@ -11,6 +11,7 @@
 #define WANIN_PAYLOAD -2
 
 extern int is_firm_465dex(void);
+extern int is_firm_466dex(void);
 extern void set_bdvdemu_465dex(int current_payload);
 extern void load_payload_465dex(int mode);
 extern int is_payload_loaded_465dex(void);

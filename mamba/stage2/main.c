@@ -21,13 +21,13 @@
 #include <lv2/symbols.h>
 #include <lv1/stor.h>
 #include <lv1/patch.h>
-
 #include "modulespatch.h"
 #include "mappath.h"
 #include "storage_ext.h"
 #include "config.h"
 #include "syscall8.h"
 #include "region.h"
+#include "ps3mapi.h"
 
 // Format of version:
 // byte 0, 7 MS bits -> reserved
@@ -324,8 +324,29 @@ LV2_SYSCALL2(int64_t, syscall8, (uint64_t function, uint64_t param1, uint64_t pa
 	}
 
 	switch (function)
-	{
-        case SYSCALL8_OPCODE_GET_MAMBA:
+	{       	
+        case SYSCALL8_OPCODE_PS3API:	
+			switch ((int)param1)
+			{
+				case PS3API_OPCODE_GET_VERSION:
+					return 0x0010;
+				break;
+				case PS3API_OPCODE_GET_ALL_PROC:
+					return ps3mapi_get_all_processes();
+				break;
+				case PS3API_OPCODE_GET_PROC_MEM:
+					return ps3mapi_get_process_mem((uint32_t)param2, param3, (int)param4);
+				break;
+				case PS3API_OPCODE_SET_PROC_MEM:
+					return ps3mapi_set_process_mem((uint32_t)param2, param3, (char *)param4, (int)param5);
+				break;
+				default:
+					return ENOSYS;
+				break;
+			}
+		break;
+		
+		case SYSCALL8_OPCODE_GET_MAMBA:
             return 0x666;
 		break;
 
@@ -566,7 +587,6 @@ int main(void)
     create_syscall2(8, syscall8);
     create_syscall2(7, sys_cfw_poke);
     create_syscall2(40, sys_cfw_40);
-
 
     return 0;
 }

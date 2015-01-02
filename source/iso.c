@@ -43,7 +43,7 @@
 #include <malloc.h>
 #include <string.h>
 #include <ctype.h>
-
+#include <sys/file.h>
 
 //#define ALIGNED32SECTORS 1
 
@@ -3123,6 +3123,7 @@ int extractps3iso(char *f_iso, char *g_path, int split)
     }
 
     fixpath(path1);
+    if(!is_ntfs_path(path1)) sysLv2FsChmod(path1, FS_S_IFMT | 0777);
 
     n = strlen(path1);
 
@@ -4005,6 +4006,7 @@ int patchps3iso(char *f_iso, int nopause)
     }
 
     fixpath(path1);
+    if(!is_ntfs_path(path1)) sysLv2FsChmod(path1, FS_S_IFMT | 0777);
 
     n = strlen(path1);
 
