@@ -795,5 +795,10 @@ int sys_prx_load_vsh_plugin(unsigned int slot, char *path, void *arg, uint32_t a
 int sys_prx_unload_vsh_plugin(unsigned int slot);
 int sys_thread_create_ex(sys_ppu_thread_t *thread, void *entry, uint64_t arg, int prio, uint64_t stacksize, uint64_t flags, const char *threadname);
 
+///////////// PS3MAPI END //////////////
+
+void unhook_all_modules(void);
+
+///////////// PS3MAPI END //////////////
 #endif /* __MODULESPATCH_H__ */
 

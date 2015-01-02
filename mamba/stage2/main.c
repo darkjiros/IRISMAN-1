@@ -27,7 +27,10 @@
 #include "config.h"
 #include "syscall8.h"
 #include "region.h"
-#include "ps3mapi.h"
+/////////////////// PS3MAPI BEGIN
+#include "ps3mapi_core.h"
+/////////////////// PS3MAPI END
+
 
 // Format of version:
 // byte 0, 7 MS bits -> reserved
@@ -140,7 +143,6 @@ LV2_HOOKED_FUNCTION_PRECALL_SUCCESS_8(int, load_process_hooked, (process_t proce
         return 0x80010009;
 
 	}
-	/*
     else
 	{
 		block_peek = 0;
@@ -284,6 +286,22 @@ LV2_SYSCALL2(void, sys_cfw_poke, (uint64_t *ptr, uint64_t value))
 }
 
 
+///////////// PS3MAPI BEGIN //////////////
+
+static void unhook_all(void)
+{
+	suspend_intr();
+	unhook_function_on_precall_success(load_process_symbol, load_process_hooked, 9);	
+	resume_intr();
+	unhook_all_modules();
+	unhook_all_region();
+	//unhook_all_map_path;
+    //unhook_all_storage_ext;
+}
+
+///////////// PS3MAPI END //////////////
+
+
 LV2_SYSCALL2(int64_t, syscall8, (uint64_t function, uint64_t param1, uint64_t param2, uint64_t param3, uint64_t param4, uint64_t param5, uint64_t param6, uint64_t param7))
 {
 	static uint32_t pid_blocked = 0;
@@ -325,27 +343,135 @@ LV2_SYSCALL2(int64_t, syscall8, (uint64_t function, uint64_t param1, uint64_t pa
 
 	switch (function)
 	{       	
-        case SYSCALL8_OPCODE_PS3API:	
+		///////////// PS3MAPI BEGIN //////////////
+		case SYSCALL8_OPCODE_STEALTH_TEST:  //PSNPatch stealth extension compatibility
+			return SYSCALL8_STEALTH_OK;
+		break;
+		case SYSCALL8_OPCODE_STEALTH_ACTIVATE: //PSNPatch stealth extension compatibility
+		{
+			ps3mapi_clean_syscall();//disables syscalls (exclude 8)
+			return SYSCALL8_STEALTH_OK;
+		}
+		break;
+		case SYSCALL8_OPCODE_PS3MAPI:	
 			switch ((int)param1)
 			{
-				case PS3API_OPCODE_GET_VERSION:
-					return 0x0010;
+				case PS3MAPI_OPCODE_GET_CORE_VERSION:
+					return PS3MAPI_CORE_VERSION;
 				break;
-				case PS3API_OPCODE_GET_ALL_PROC:
-					return ps3mapi_get_all_processes();
+				case PS3MAPI_OPCODE_GET_CORE_MINVERSION:
+					return PS3MAPI_CORE_MINVERSION;
 				break;
-				case PS3API_OPCODE_GET_PROC_MEM:
-					return ps3mapi_get_process_mem((uint32_t)param2, param3, (int)param4);
+				case PS3MAPI_OPCODE_GET_FW_VERSION:
+					return PS3MAPI_FW_VERSION;
 				break;
-				case PS3API_OPCODE_SET_PROC_MEM:
-					return ps3mapi_set_process_mem((uint32_t)param2, param3, (char *)param4, (int)param5);
+				case PS3MAPI_OPCODE_GET_FW_TYPE:
+					return ps3mapi_get_fw_type((char *)param2);
+				break;
+				case PS3MAPI_OPCODE_GET_ALL_PROC_PID:
+					return ps3mapi_get_all_processes_pid((process_id_t *)param2);
+				break;
+				case PS3MAPI_OPCODE_GET_PROC_NAME_BY_PID:
+					return ps3mapi_get_process_name_by_pid((process_id_t)param2, (char *)param3);
+				break;
+				case PS3MAPI_OPCODE_GET_PROC_BY_PID:
+					return ps3mapi_get_process_by_pid((process_id_t)param2, (process_t)param3);
+				break;
+				case PS3MAPI_OPCODE_GET_CURRENT_PROC:
+					return ps3mapi_get_current_process((process_t)param2);
+				break;
+				case PS3MAPI_OPCODE_GET_CURRENT_PROC_CRIT:
+					return ps3mapi_get_current_process_critical((process_t)param2);
+				break;
+				/* case PS3MAPI_OPCODE_KILL_PROC_BY_PID:
+					 return ps3mapi_process_kill_by_pid((process_id_t)param2); //SYMBOLS ERROR ???
+				 break; */
+				case PS3MAPI_OPCODE_GET_PROC_MEM:
+					return ps3mapi_get_process_mem((process_id_t)param2, param3, (char *)param4, (int)param5);
+				break;
+				case PS3MAPI_OPCODE_SET_PROC_MEM:
+					return ps3mapi_set_process_mem((process_id_t)param2, param3, (char *)param4, (int)param5);
+				break;
+				case PS3MAPI_OPCODE_GET_ALL_PROC_MODULE_PID:
+				#if defined(FIRMWARE_4_46)
+					return ps3mapi_get_all_process_modules_prx_id((process_id_t)param2, (sys_prx_id_t *)param3);
+				#elif defined(FIRMWARE_4_50)
+					return 0; //MISSING SYMBOLS
+				#elif defined(FIRMWARE_4_50DEX)
+					return ps3mapi_get_all_process_modules_prx_id((process_id_t)param2, (sys_prx_id_t *)param3);
+				#elif defined(FIRMWARE_4_53)
+					return ps3mapi_get_all_process_modules_prx_id((process_id_t)param2, (sys_prx_id_t *)param3);
+				#elif defined(FIRMWARE_4_55)
+					return ps3mapi_get_all_process_modules_prx_id((process_id_t)param2, (sys_prx_id_t *)param3);
+				#elif defined(FIRMWARE_4_60)
+					return 0; //MISSING SYMBOLS
+				#elif defined(FIRMWARE_4_65)
+					return ps3mapi_get_all_process_modules_prx_id((process_id_t)param2, (sys_prx_id_t *)param3);
+				#elif defined(FIRMWARE_4_66)
+					return 0; //MISSING SYMBOLS
+				#endif
+				break;
+				case PS3MAPI_OPCODE_GET_PROC_MODULE_NAME:
+				#if defined(FIRMWARE_4_46)
+					return ps3mapi_get_process_module_name_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_50)
+					return 0; //MISSING SYMBOLS
+				#elif defined(FIRMWARE_4_50DEX)
+					return ps3mapi_get_process_module_name_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_53)
+					return ps3mapi_get_process_module_name_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_55)
+					return ps3mapi_get_process_module_name_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_60)
+					return 0; //MISSING SYMBOLS
+				#elif defined(FIRMWARE_4_65)
+					return ps3mapi_get_process_module_name_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_66)
+					return 0; //MISSING SYMBOLS
+				#endif
+				break;
+				case PS3MAPI_OPCODE_GET_PROC_MODULE_FILENAME:
+				#if defined(FIRMWARE_4_46)
+					return ps3mapi_get_process_module_filename_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_50)
+					return 0; //MISSING SYMBOLS
+				#elif defined(FIRMWARE_4_50DEX)
+					return ps3mapi_get_process_module_filename_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_53)
+					return ps3mapi_get_process_module_filename_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_55)
+					return ps3mapi_get_process_module_filename_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_60)
+					return 0; //MISSING SYMBOLS
+				#elif defined(FIRMWARE_4_65)
+					return ps3mapi_get_process_module_filename_by_prx_id((process_id_t)param2, (sys_prx_id_t)param3, (char *)param4);
+				#elif defined(FIRMWARE_4_66)
+					return 0; //MISSING SYMBOLS
+				#endif
+				break;
+				
+				case PS3MAPI_OPCODE_LOAD_PROC_MODULE:
+					return ps3mapi_load_process_modules((process_id_t)param2, (char *)param3, (void *)param4, (uint32_t)param5);
+				break;
+				case PS3MAPI_OPCODE_UNLOAD_PROC_MODULE:
+					return ps3mapi_unload_process_modules((process_id_t)param2, (sys_prx_id_t)param3);
+				break;
+				case PS3MAPI_OPCODE_CLEAN_SYSCALL:
+					return ps3mapi_clean_syscall();
+				break;
+				case PS3MAPI_OPCODE_FULL_CLEAN_SYSCALL:
+					unhook_all(); //Unload "MAMBA/COBRA HOOK" their no more needed since syscall8 is disabled.
+					return ps3mapi_full_clean_syscall();
+				break;
+				case PS3MAPI_OPCODE_CHECK_SYSCALL:
+					return ps3mapi_check_syscall();
 				break;
 				default:
 					return ENOSYS;
 				break;
 			}
 		break;
-		
+		///////////// PS3MAPI END //////////////
 		case SYSCALL8_OPCODE_GET_MAMBA:
             return 0x666;
 		break;

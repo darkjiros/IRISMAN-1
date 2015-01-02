@@ -863,14 +863,16 @@ LV2_HOOKED_FUNCTION_COND_POSTCALL_2(int, pre_modules_verification, (uint32_t *re
 
 void pre_map_process_memory(void *object, uint64_t process_addr, uint64_t size, uint64_t flags, void *unk, void *elf, uint64_t *out);
 
-static void unhook_and_clear(void)
+///////////// PS3MAPI BEGIN //////////////
+
+/* static void unhook_and_clear(void)
 {
 	// Unhook this function. Also, clear stage1 now.
 	suspend_intr();
 	unhook_function_with_postcall(map_process_memory_symbol, pre_map_process_memory, 7);	
 	resume_intr();
 	memset((void *)MKA(0x7f0000), 0, 0x10000);
-}
+} */
 
 LV2_HOOKED_FUNCTION_POSTCALL_7(void, pre_map_process_memory, (void *object, uint64_t process_addr, uint64_t size, uint64_t flags, void *unk, void *elf, uint64_t *out))
 {
@@ -879,15 +881,11 @@ LV2_HOOKED_FUNCTION_POSTCALL_7(void, pre_map_process_memory, (void *object, uint
 	// Not the call address, but the call to the caller (process load code for .self)
 	if (get_call_address(1) == (void *)MKA(process_map_caller_call))
 	{
-		if (process_addr == 0x10000 && flags == 0x2008004)//EDIT PS3API!
-		{
-			// Change flags, RX -> RWX, make process text writable for all processes (not only vsh) //EDIT PS3API!
-			set_patched_func_param(4, 0x2004004);
-			// We don't need this hook anymore. //EDIT PS3API! We always need it !!!
-			//unhook_and_clear(); //EDIT PS3API!
-		}
+		if (flags == 0x2008004) set_patched_func_param(4, 0x2004004); // Change flags, RX -> RWX, make all process memory writable.
 	}	
 }
+
+///////////// PS3MAPI END //////////////
 
 #if 0
 LV2_HOOKED_FUNCTION_PRECALL_SUCCESS_8(int, load_process_hooked, (process_t process, int fd, char *path, int r6, uint64_t r7, uint64_t r8, uint64_t r9, uint64_t r10, uint64_t sp_70))
@@ -1258,3 +1256,21 @@ void modules_patch_init(void)
 	//hook_function_with_postcall(create_process_common_symbol, create_process_common_hooked_pre, 8);
 #endif
 }
+
+///////////// PS3MAPI BEGIN //////////////
+void unhook_all_modules(void)
+{
+	int n;
+    for(n = 0; n < MAX_VSH_PLUGINS; n++) vsh_plugins[n] = 0;
+	suspend_intr();
+	unhook_function_with_precall(lv1_call_99_wrapper_symbol, post_lv1_call_99_wrapper, 2);
+	unhook_function_with_cond_postcall(modules_verification_symbol, pre_modules_verification, 2);
+	unhook_function_with_postcall(map_process_memory_symbol, pre_map_process_memory, 7);	
+	//unhook_function_on_precall_success(load_process_symbol, load_process_hooked, 9);	
+	#ifdef DEBUG
+	unhook_function_on_precall_success(create_process_common_symbol, create_process_common_hooked, 16);
+	//unhook_function_with_postcall(create_process_common_symbol, create_process_common_hooked_pre, 8);
+	#endif
+	resume_intr();
+}
+///////////// PS3MAPI END //////////////

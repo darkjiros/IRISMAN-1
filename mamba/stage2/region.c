@@ -128,3 +128,14 @@ void region_patches(void)
 {
 	hook_function_on_precall_success(get_syscall_address(867), region_func, 2);
 }
+
+///////////// PS3MAPI BEGIN //////////////
+
+void unhook_all_region(void)
+{
+	suspend_intr();
+	unhook_function_on_precall_success(get_syscall_address(867), region_func, 2);
+	resume_intr();
+}
+
+///////////// PS3MAPI END //////////////
