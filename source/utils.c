@@ -2732,7 +2732,8 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
             if(stat(file, &s) < 0)  continue;
         }
 
-        if (((*max) & 4) == 4) {
+        if(((*max) & 4) == 4)
+        {
             static char string1[256];
             msgDialogProgressBarReset(MSG_PROGRESSBAR_INDEX0);
 
@@ -4359,7 +4360,7 @@ static int my_game_copy(char *path, char *path2)
     msgDialogProgressBarReset(MSG_PROGRESSBAR_INDEX0);
     msgDialogProgressBarReset(MSG_PROGRESSBAR_INDEX1);
 
-    sysUtilCheckCallback();tiny3d_Flip();
+    sysUtilCheckCallback(); tiny3d_Flip();
 
     global_device_bytes = 0;
 

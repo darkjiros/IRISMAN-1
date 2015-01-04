@@ -420,8 +420,13 @@ char temp_buffer[8192];
 //void MSGBOX(char *text, char *text2) {sprintf(temp_buffer, "%s = %s", text, text2); DrawDialogOKTimer(temp_buffer, 5000.0f);}    //debug message
 //void MSGBOX2(char *text, int i) {sprintf(temp_buffer, "%s = %i", text, i); DrawDialogOKTimer(temp_buffer, 5000.0f);}    //debug message
 
-int load_boot_prx(char * config_path);
+//int load_boot_prx(char * config_path);
 
+LV2_SYSCALL sys_storage_ext_fake_storage_event(uint64_t event, uint64_t param, uint64_t device)
+{
+    lv2syscall4(8, SYSCALL8_OPCODE_FAKE_STORAGE_EVENT, event, param, device);
+    return_to_user_prog(s32);
+}
 
 int LoadPNG(PngDatas *png, const char *filename)
 {
@@ -4092,6 +4097,14 @@ s32 main(s32 argc, const char* argv[])
 
     //sprintf(temp_buffer, "%s/PKG", self_path);
     if(strlen(updates_path)) mkdir_secure(updates_path);
+
+    // copy SHOWTIME.SELF from multiMAN (if a local copy does not exist)
+    sprintf(tmp_path, "%s/USRDIR/SHOWTIME.SELF", self_path);
+    if(file_exists(tmp_path)==false)
+    {
+        sysLv2FsLink("/dev_hdd0/game/BLES80608/USRDIR/sys/SHOWTIME.SELF", tmp_path);
+    }
+
 #endif
 
     // initialize manager conf
@@ -4601,6 +4614,7 @@ s32 main(s32 argc, const char* argv[])
 
     if(use_mamba && bLoadMambaAndQuit) exit_program = true;
 
+
     //////////////////////////////////////////
     // Main loop
     /////////////////////////////////////////
@@ -4650,6 +4664,7 @@ s32 main(s32 argc, const char* argv[])
 
         if(forcedevices || (frame_count & 63) == 0 || signal_force)
         {
+
           for(find_device = HDD0_DEVICE; find_device <= BDVD_DEVICE; find_device++)
           {
             if(filter_by_device >= HDD0_DEVICE)
@@ -5252,15 +5267,8 @@ skip_bdvd:
 
         /////////////////////////////////////
 
-        if(gui_mode == MODE_COVERFLOW)
-            cls0();
-        else
-        {
-            cls();
-            update_twat(true);
-        }
 
-        x = (848 - 640) / 2; y = (512 - 360) / 2;
+//        x = (848 - 640) / 2; y = (512 - 360) / 2;
 //        DrawBox(x - 16, y - 16, 65535.0f, 640.0f + 32, 360 + 32, 0x00000028);
 //        DrawBox(x, y, 65535.0f, 640.0f, 360, 0x30003018);
 
@@ -5355,6 +5363,14 @@ skip_bdvd:
         }
 
         if(ndirectories < 1) gui_control();
+
+        if(gui_mode == MODE_COVERFLOW)
+            cls0();
+        else
+        {
+            cls();
+            update_twat(true);
+        }
 
         switch(menu_screen)
         {
@@ -7585,6 +7601,8 @@ autolaunch_proc:
 
                 SaveGameList();
 
+                tiny3d_Flip(); r = 1; //do not refresh gui
+
 #ifndef LASTPLAY_LOADER
                 // Save LASTPLAY.BIN for lastGAME
                 if(bAddToLastGameApp && file_exists(LASTGAME_PATH_SS "USRDIR/ORG.PNG"))
@@ -7796,7 +7814,6 @@ autolaunch_proc:
                     fclose(fp);
                 }
 #endif
-
                 if(!strncmp(directories[currentgamedir].title_id, "HTSS00003", 9))
                 {
                     if((old_pad & (BUTTON_SELECT | BUTTON_L2)) && file_exists("/dev_hdd0/game/HTSS00003/USRDIR/showtime.self"))
@@ -7849,7 +7866,6 @@ autolaunch_proc:
                     launch_ps2classic(directories[currentgamedir].path_name, directories[currentgamedir].title);
                     return r;
                 }
-
 
                 if(unsupported_cfw)
                 {
@@ -8069,6 +8085,39 @@ autolaunch_proc:
 
                 // Fix PS3_EXTRA flag in PARAM.SFO
                 fix_PS3_EXTRA_attribute(directories[currentgamedir].path_name);
+
+                // -- reset USB bus
+                if(use_cobra || use_mamba)
+                {
+                    if(strstr(directories[currentgamedir].path_name, "/dev_usb") && file_exists(directories[currentgamedir].path_name))
+                    {
+                        u8 indx=0;
+
+                        for(u8 f0=0; f0<8; f0++) sys_storage_ext_fake_storage_event(4, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
+                        for(u8 f0=0; f0<8; f0++) sys_storage_ext_fake_storage_event(8, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
+
+                        sleep(1);
+
+                        if(strstr(directories[currentgamedir].path_name, "/dev_usb00")) indx=directories[currentgamedir].path_name[10]-0x30;
+
+                        sys_storage_ext_fake_storage_event(7, 0, ((indx<6)?USB_MASS_STORAGE_1(indx):USB_MASS_STORAGE_2(indx)));
+                        sys_storage_ext_fake_storage_event(3, 0, ((indx<6)?USB_MASS_STORAGE_1(indx):USB_MASS_STORAGE_2(indx)));
+
+                        sleep(3);
+
+                        for(u8 f0=0; f0<8; f0++)
+                        {
+                            if(f0!=indx)
+                            {
+                                sys_storage_ext_fake_storage_event(7, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
+                                sys_storage_ext_fake_storage_event(3, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
+                            }
+                        }
+                    }
+
+                    sprintf(tmp_path, "%s", directories[currentgamedir].path_name);
+                    if(strstr(tmp_path, "/dev_usb0")) sprintf(directories[currentgamedir].path_name, "/dev_usb%s", tmp_path+11);
+                }
 
                 if(!game_cfg.ext_ebootbin)
                     sys8_path_table(0LL);

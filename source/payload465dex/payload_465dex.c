@@ -285,26 +285,35 @@ void load_payload_465dex (int mode)
     //Patches from webMAN
     if(bEnableLv2_webman_patch)
     {
-        pokeq(0x80000000002764F8ULL, 0x4E80002038600000ULL ); // fix 8001003C error  Original: 0x4E80002038600000ULL
-        pokeq(0x8000000000276500ULL, 0x7C6307B44E800020ULL ); // fix 8001003C error  Original: 0x7C6307B44E800020ULL
-        pokeq(0x8000000000059F5CULL, 0x63FF003D60000000ULL ); // fix 8001003D error  Original: 0x63FF003D419EFFD4ULL
-        pokeq(0x800000000005A020ULL, 0x3FE080013BE00000ULL ); // fix 8001003E error  Original: 0x3FE0800163FF003EULL
+		//patches by deank
+		pokeq(0x80000000002764F8ULL, 0x4E80002038600000ULL ); // fix 8001003C error  Original: 0x4E80002038600000ULL
+		pokeq(0x8000000000276500ULL, 0x7C6307B44E800020ULL ); // fix 8001003C error  Original: 0x7C6307B44E800020ULL
+		pokeq(0x8000000000059F5CULL, 0x63FF003D60000000ULL ); // fix 8001003D error  Original: 0x63FF003D419EFFD4ULL
+		pokeq(0x800000000005A020ULL, 0x3FE080013BE00000ULL ); // fix 8001003E error  Original: 0x3FE0800163FF003EULL
 
-        pokeq(0x8000000000059FCCULL, 0x419E00D860000000ULL ); // Original: 0x419E00D8419D00C0ULL
-        pokeq(0x8000000000059FD4ULL, 0x2F84000448000098ULL ); // Original: 0x2F840004409C0048ULL //PATCH_JUMP
-        pokeq(0x800000000005E028ULL, 0x2F83000060000000ULL ); // fix 80010009 error  Original: 0x2F830000419E00ACULL
-        pokeq(0x800000000005E03CULL, 0x2F83000060000000ULL ); // fix 80010009 error  Original: 0x2F830000419E00ACULL
+		pokeq(0x8000000000059FCCULL, 0x419E00D860000000ULL ); // Original: 0x419E00D8419D00C0ULL
+		pokeq(0x8000000000059FD4ULL, 0x2F84000448000098ULL ); // Original: 0x2F840004409C0048ULL //PATCH_JUMP
+		pokeq(0x800000000005E028ULL, 0x2F83000060000000ULL ); // fix 80010009 error  Original: 0x2F830000419E00ACULL
+		pokeq(0x800000000005E03CULL, 0x2F83000060000000ULL ); // fix 80010009 error  Original: 0x2F830000419E00ACULL
 
+		pokeq(0x8000000000059C00ULL, 0x386000012F830000ULL ); // ignore LIC.DAT check
+		pokeq(0x80000000002367CCULL, 0x38600000F8690000ULL ); // fix 0x8001002B / 80010017 errors (ported for DEX 2015-01-03)
+
+		pokeq(0x800000000005962CULL, 0xF821FE917C0802A6ULL ); // just restore the original
+		pokeq(0x800000000005C780ULL, 0x419E0038E8610098ULL ); // just restore the original
+
+/*
         if(file_exists("/dev_flash/rebug")==false || bEnableLv2_webman_patch==3)
         {
-            pokeq(0x800000000005962CULL, 0xF821FE917C0802A6ULL );
+            //anti-ode patches by deank
+            //pokeq(0x800000000005962CULL, 0xF821FE917C0802A6ULL ); //replaced by deank's patch (2015-01-03)
             pokeq(0x8000000000059654ULL, 0x6000000060000000ULL );
             pokeq(0x800000000005965CULL, 0x600000003BA00000ULL );
         }
 
         pokeq(0x800000000005C780ULL, 0x60000000E8610098ULL );
-
-        if(bEnableLv2_webman_patch>=2) bEnableLv2_habib_patch=0;
+*/
+        if(bEnableLv2_webman_patch>=2 || bEnableLv2_habib_patch == 2) bEnableLv2_habib_patch=0;
     }
 
     if((bEnableLv2_habib_patch == 11) || (bEnableLv2_habib_patch == 2))

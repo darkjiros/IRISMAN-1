@@ -40,6 +40,9 @@ typedef int sys_io_block_t;
 
 #define BD_DEVICE                              0x0101000000000006ULL
 
+#define USB_MASS_STORAGE_1(n)	(0x10300000000000AULL+n) /* For 0-5 */
+#define USB_MASS_STORAGE_2(n)	(0x10300000000001FULL+(n-6)) /* For 6-127 */
+
 /* The generic packet command opcodes for CD/DVD Logical Units,
  * From Table 57 of the SFF8090 Ver. 3 (Mt. Fuji) draft standard. */
 #define GPCMD_GET_CONFIGURATION                0x46
@@ -72,7 +75,7 @@ typedef struct
     uint8_t     name[7];
     uint8_t     unknown01;
     uint32_t    unknown02; // random nr?
-    uint32_t    zero01; 
+    uint32_t    zero01;
     uint32_t    unknown03; // 0x28?
     uint32_t    unknown04; // 0xd000e990?
     uint8_t     zero02[16];
@@ -125,7 +128,7 @@ static inline int sys_storage_send_atapi_command(uint32_t fd, struct lv2_atapi_c
                 , (uint64_t) &tag);
 
     return_to_user_prog(int);
-  
+
 }
 
 
@@ -138,7 +141,7 @@ static inline int sys_storage_send_device_cmd(uint32_t fd, uint32_t cmd, void * 
                 , cmd_size
                 , (uint64_t) data_buffer
                 , len_data_buffer);
-    
+
     return_to_user_prog(int);
 }
 
@@ -179,7 +182,7 @@ static inline int sys_storage_read(int fd, uint32_t start_sector, uint32_t secto
     lv2syscall7(602, fd, 0, start_sector, sectors, (uint64_t) bounce_buf, (uint64_t) sectors_read, 0);
 
     return_to_user_prog(int);
-    
+
 }
 
 static inline int sys_storage_async_read(int fd, uint32_t start_sector, uint32_t sectors, sys_io_block_t bounce_buf, uint64_t user_data)
@@ -187,7 +190,7 @@ static inline int sys_storage_async_read(int fd, uint32_t start_sector, uint32_t
     lv2syscall7(606, fd, 0, start_sector, sectors, bounce_buf, user_data, 0);
 
     return_to_user_prog(int);
-    
+
 }
 
 /**
@@ -198,7 +201,7 @@ static inline int sys_storage_reset_bd(void)
     lv2syscall2(864, 0x5004, 0x29);
 
     return_to_user_prog(int);
-    
+
 }
 
 /**
@@ -218,22 +221,22 @@ static inline int sys_storage_ctrl_bd(int _func)
 {
     uint64_t func[0x18/8];
     func[0]= (uint64_t) _func;
-    
+
     lv2syscall2(864, 0x5007, (uint64_t) &func[0]);
 
     return_to_user_prog(int);
-    
+
 }
 
 /*
 static inline int sys_storage_ctrl_bd(int _func)
 {
     int func = _func;
-    
+
     lv2syscall2(864, 0x5007, (uint64_t) &func);
 
     return_to_user_prog(int);
-    
+
 }
 */
 

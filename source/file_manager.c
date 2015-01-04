@@ -1042,6 +1042,7 @@ int CopyFile(char* path, char* path2)
 
     if(allow_shadow_copy && !strncmp(path, "/dev_hdd0", 9) && !strncmp(path2, "/dev_hdd0", 9))
     {
+        sysLv2FsUnlink(path2);
         return sysLv2FsLink(path, path2);
     }
 
