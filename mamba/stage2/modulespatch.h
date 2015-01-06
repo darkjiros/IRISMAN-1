@@ -700,6 +700,14 @@
 #define revision_offset2		0x0 /* In data section */
 #define spoof_version_patch		0x0
 
+#elif defined(FIRMWARE_4_66DEX)
+
+#define vmode_patch_offset		0x0 // undefined
+#define vsh_text_size			0x0 // undefined
+#define revision_offset			0x0
+#define revision_offset2		0x0 /* In data section */
+#define spoof_version_patch		0x0
+
 #endif /* FIRMWARE */
 
 /* 3.72 */
@@ -780,6 +788,13 @@ extern uint8_t condition_psp_prometheus;
 extern uint8_t block_peek;
 
 extern process_t vsh_process;
+
+///////////// NzV BEGIN //////////////
+
+process_t get_vsh_process(void);
+
+///////////// NzV BEGIN //////////////
+
 extern uint8_t safe_mode;
 
 /* Functions for kernel */

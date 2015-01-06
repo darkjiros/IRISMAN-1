@@ -90,6 +90,24 @@ static uint8_t *saved_buf;
 static void *saved_sce_hdr;
 
 process_t vsh_process;
+
+///////////// NzV BEGIN //////////////
+process_t get_vsh_process(void)
+{
+	uint64_t *proc_list = *(uint64_t **)MKA(TOC+process_rtoc_entry_1);	
+	proc_list = *(uint64_t **)proc_list;
+	proc_list = *(uint64_t **)proc_list;	
+	for (int i = 0; i < 16; i++)
+	{
+		process_t p = (process_t)proc_list[1];	
+		proc_list += 2;		
+		if ((((uint64_t)p) & 0xFFFFFFFF00000000ULL) != MKA(0)) continue;
+		if (is_vsh_process(p)) return p;
+	}
+	return NULL;
+}
+///////////// NzV BEGIN //////////////
+
 uint8_t safe_mode;
 
 static uint32_t caller_process = 0;
@@ -970,7 +988,7 @@ int prx_load_vsh_plugin(unsigned int slot, char *path, void *arg, uint32_t arg_s
 	void *kbuf, *vbuf;
 	sys_prx_id_t prx;
 	int ret;	
-
+	if (!vsh_process) vsh_process = get_vsh_process(); //NzV
     if(!vsh_process) return -666;
 	
 	if (slot >= MAX_VSH_PLUGINS || (arg != NULL && arg_size > KB(64)))
@@ -1033,7 +1051,7 @@ int prx_unload_vsh_plugin(unsigned int slot)
 {
 	int ret;
 	sys_prx_id_t prx;
-
+	if (!vsh_process) vsh_process = get_vsh_process(); //NzV
     if(!vsh_process) return -666;
 	
 	//DPRINTF("Trying to unload vsh plugin %x\n", slot);
@@ -1260,8 +1278,6 @@ void modules_patch_init(void)
 ///////////// PS3MAPI BEGIN //////////////
 void unhook_all_modules(void)
 {
-	int n;
-    for(n = 0; n < MAX_VSH_PLUGINS; n++) vsh_plugins[n] = 0;
 	suspend_intr();
 	unhook_function_with_precall(lv1_call_99_wrapper_symbol, post_lv1_call_99_wrapper, 2);
 	unhook_function_with_cond_postcall(modules_verification_symbol, pre_modules_verification, 2);

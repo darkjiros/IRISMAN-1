@@ -8086,38 +8086,6 @@ autolaunch_proc:
                 // Fix PS3_EXTRA flag in PARAM.SFO
                 fix_PS3_EXTRA_attribute(directories[currentgamedir].path_name);
 
-                // -- reset USB bus
-                if(use_cobra || use_mamba)
-                {
-                    if(strstr(directories[currentgamedir].path_name, "/dev_usb") && file_exists(directories[currentgamedir].path_name))
-                    {
-                        u8 indx=0;
-
-                        for(u8 f0=0; f0<8; f0++) sys_storage_ext_fake_storage_event(4, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
-                        for(u8 f0=0; f0<8; f0++) sys_storage_ext_fake_storage_event(8, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
-
-                        sleep(1);
-
-                        if(strstr(directories[currentgamedir].path_name, "/dev_usb00")) indx=directories[currentgamedir].path_name[10]-0x30;
-
-                        sys_storage_ext_fake_storage_event(7, 0, ((indx<6)?USB_MASS_STORAGE_1(indx):USB_MASS_STORAGE_2(indx)));
-                        sys_storage_ext_fake_storage_event(3, 0, ((indx<6)?USB_MASS_STORAGE_1(indx):USB_MASS_STORAGE_2(indx)));
-
-                        sleep(3);
-
-                        for(u8 f0=0; f0<8; f0++)
-                        {
-                            if(f0!=indx)
-                            {
-                                sys_storage_ext_fake_storage_event(7, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
-                                sys_storage_ext_fake_storage_event(3, 0, ((f0<6)?USB_MASS_STORAGE_1(f0):USB_MASS_STORAGE_2(f0)));
-                            }
-                        }
-                    }
-
-                    sprintf(tmp_path, "%s", directories[currentgamedir].path_name);
-                    if(strstr(tmp_path, "/dev_usb0")) sprintf(directories[currentgamedir].path_name, "/dev_usb%s", tmp_path+11);
-                }
 
                 if(!game_cfg.ext_ebootbin)
                     sys8_path_table(0LL);
