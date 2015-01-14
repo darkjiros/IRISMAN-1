@@ -2117,6 +2117,16 @@ int fill_iso_entries_from_device(char *path, u32 flag, t_directories *list, int 
             else if(strlen(name) > 4)
                 name[strlen(name) - 4] = 0;  // ISO/MKV/MP4/MP3/AVI/MPG/FLV/WMV/ASF/etc.
 
+            if(is_ps2_classic && strcmp(name, "ISO")==0)
+            {
+                if(strstr(path, "[PS2"))
+                    strcpy(name, strstr(path, "[PS2"));
+                else if(strstr(path, "PS2ISO/"))
+                    strcpy(name, strstr(path, "PS2ISO/")+7);
+
+                for(u16 p=strlen(name); p>0; p--) if(name[p]=='/') name[p]=0;
+            }
+
             // cache ICON0 and SFO for webMAN
             if(use_wmtmp_ps3)
             {
