@@ -229,6 +229,7 @@ extern char self_path[MAXPATHLEN];
 int mount_option = 0;
 bool allow_shadow_copy = true;
 
+int sys_map_path(char *oldpath, char *newpath);
 int mount_psp_iso(char *path);
 
 int sys_fs_mount(char const* deviceName, char const* deviceFileSystem, char const* devicePath, int writeProt);
@@ -865,7 +866,7 @@ skip:
     if(ret > SUCCESS) ret = SUCCESS;
     if(mem) free(mem);
 
-    if(progress_action == 2) {if(is_ntfs) ps3ntfs_unlink(temp_buffer); else unlink_secure(temp_buffer);}
+    if(progress_action == 2) unlink_secure(temp_buffer);
 
     msgDialogAbort();
 
@@ -1356,7 +1357,7 @@ skip:
             if(my_f_async.flags  & ASYNC_ERROR) {ret = 0x8001000C;}
         }
 
-        if(flags & CPY_FILE2_IS_NTFS) ps3ntfs_unlink(path2); else unlink_secure(path2);
+        unlink_secure(path2);
     }
 
     //msgDialogAbort();
@@ -3748,6 +3749,9 @@ void launch_ps2classic(char *ps2iso_path, char *ps2iso_title)
 
                 if(ret == SUCCESS)
                 {
+                    if(firmware>=0x465C)
+                        SaveFile("/dev_hdd0/classic_ps2", (char *)temp_buffer, 0);
+
                     temp_buffer[strlen(temp_buffer) - 4] = 0;
                     strcat(temp_buffer, ".png");
                     if(file_exists(temp_buffer))
@@ -3794,7 +3798,13 @@ void launch_ps2classic(char *ps2iso_path, char *ps2iso_title)
         if(ret)
             DrawDialogOKTimer("ERROR: PS2 image could not be copied to PS2 Classics Placeholder", 5000.0f);
         else if(DrawDialogYesNoDefaultYes("Do you want to exit to XMB to launch the mounted game with PS2 Classics Placeholder?") == YES)
+        {
+            // Save game list
+            fun_exit();
+            SaveGameList();
+
             exit(0);
+        }
     }
     else
         DrawDialogOKTimer("PS2 Classics Placeholder must be installed", 3000.0f);
@@ -4066,6 +4076,11 @@ int mount_psp_iso(char *path)
     {
         DrawDialogOKTimer("Use PSP Remaster Launcher to play the mounted game", 2500.0f);
         cobra_send_fake_disc_insert_event();
+
+        // Save game list
+        fun_exit();
+        SaveGameList();
+
         exit(0);
     }
 }
@@ -4169,12 +4184,12 @@ mount_iso: ;
             type = mtype;
             is_ps2_game = (type == EMU_PS2_DVD);
         }
-        else if(strstr(path, "/PS3ISO/")) type = EMU_PS3;
-        else if(strstr(path, "/PS2ISO/")) type = EMU_PS2_DVD;
-        else if(strstr(path, "/PSPISO/")) type = EMU_PSP;
-        else if(strstr(path, "/PSXISO/")) type = EMU_PSX;
-        else if(strstr(path, "/DVDISO/")) type = EMU_DVD;
-        else if(strstr(path, "/BDISO/"))  type = EMU_BD;
+        else if(strstr(path, "/PS3ISO/"))  type = EMU_PS3;
+        else if(strstr(path, "/PS2ISO/")) {type = EMU_PS2_DVD; is_ps2_game = 1;}
+        else if(strstr(path, "/PSPISO/"))  type = EMU_PSP;
+        else if(strstr(path, "/PSXISO/"))  type = EMU_PSX;
+        else if(strstr(path, "/DVDISO/"))  type = EMU_DVD;
+        else if(strstr(path, "/BDISO/"))   type = EMU_BD;
         else
         {
             FILE *fp = NULL;
@@ -4260,7 +4275,7 @@ mount_iso: ;
                     sprintf(TEMP_PATH, PLUGIN_ISO, self_path);
 
                     int r = cobra_load_vsh_plugin(0, TEMP_PATH, plugin_args, 0x10000);
-                    if (r == 0) exit(0);
+                    if (r == 0) {fun_exit(); SaveGameList(); exit(0);}
 
                     sprintf(MEM_MESSAGE, "error %X loading sprx_iso plugin", r);
                     DrawDialogOK(MEM_MESSAGE);
@@ -4281,6 +4296,8 @@ mount_iso: ;
                 (type == EMU_PS2_DVD && strncmp(path, "/dev_usb", 8)))
         {
             if(plugin_args) free(plugin_args); plugin_args = NULL;
+
+            if(is_ps2_game) unlink_secure("/dev_hdd0/classic_ps2");
 
             if (!use_cobra && use_mamba)
             {
@@ -4332,7 +4349,7 @@ mount_iso: ;
             if (ret == SUCCESS)
             {
                 cobra_send_fake_disc_insert_event();
-                exit(0);
+                {fun_exit(); SaveGameList(); exit(0);}
             }
         }
         else
@@ -4395,7 +4412,7 @@ mount_with_mamba:
 
                 sprintf(TEMP_PATH1, PLUGIN_ISO, self_path);
                 int r = cobra_load_vsh_plugin(0, TEMP_PATH1, plugin_args, 0x10000);
-                if (r == 0) exit(0);
+                if (r == 0) {fun_exit(); SaveGameList(); exit(0);}
 
                 sprintf(MEM_MESSAGE, "error %X loading sprx_iso plugin", r);
                 DrawDialogOK(MEM_MESSAGE);
@@ -4438,12 +4455,12 @@ int launch_iso_game_mamba(char *path, int mtype)
             type = mtype;
             is_ps2_game = (type == EMU_PS2_DVD);
         }
-        else if(strstr(path, "/PS3ISO/")) type = EMU_PS3;
-        else if(strstr(path, "/PS2ISO/")) type = EMU_PS2_DVD;
-        else if(strstr(path, "/PSPISO/")) type = EMU_PSP;
-        else if(strstr(path, "/PSXISO/")) type = EMU_PSX;
-        else if(strstr(path, "/DVDISO/")) type = EMU_DVD;
-        else if(strstr(path, "/BDISO/"))  type = EMU_BD;
+        else if(strstr(path, "/PS3ISO/"))  type = EMU_PS3;
+        else if(strstr(path, "/PS2ISO/")) {type = EMU_PS2_DVD; is_ps2_game = 1;}
+        else if(strstr(path, "/PSPISO/"))  type = EMU_PSP;
+        else if(strstr(path, "/PSXISO/"))  type = EMU_PSX;
+        else if(strstr(path, "/DVDISO/"))  type = EMU_DVD;
+        else if(strstr(path, "/BDISO/"))   type = EMU_BD;
         else
         {
             FILE *fp = NULL;
@@ -4527,7 +4544,7 @@ int launch_iso_game_mamba(char *path, int mtype)
 
                     sprintf(TEMP_PATH1, PLUGIN_ISO, self_path);
 
-                    if (cobra_load_vsh_plugin(0, TEMP_PATH1, plugin_args, 0x10000) == 0) exit(0);
+                    if (cobra_load_vsh_plugin(0, TEMP_PATH1, plugin_args, 0x10000) == 0) {fun_exit(); SaveGameList(); exit(0);}
                 }
                 else if(parts >= MAX_SECTIONS) DrawDialogOKTimer(".ISO is very fragmented", 2000.0f);
 
@@ -4541,6 +4558,8 @@ int launch_iso_game_mamba(char *path, int mtype)
         {
             if(is_ps2_game)
             {
+                unlink_secure("/dev_hdd0/classic_ps2");
+
                 if(plugin_args) free(plugin_args); plugin_args = NULL;
 
                 if(use_mamba) return FAILED;
@@ -4589,7 +4608,7 @@ int launch_iso_game_mamba(char *path, int mtype)
                 if (ret == SUCCESS)
                 {
                     cobra_send_fake_disc_insert_event();
-                    exit(0);
+                    {fun_exit(); SaveGameList(); exit(0);}
                 }
             }
             else
@@ -4652,7 +4671,7 @@ int launch_iso_game_mamba(char *path, int mtype)
 
                     sprintf(TEMP_PATH1, PLUGIN_ISO, self_path);
                     int r = 0;
-                    if ((r = cobra_load_vsh_plugin(0, TEMP_PATH1, plugin_args, 0x10000)) == 0) exit(0);
+                    if ((r = cobra_load_vsh_plugin(0, TEMP_PATH1, plugin_args, 0x10000)) == 0) {fun_exit(); SaveGameList(); exit(0);}
 
                     sprintf(MEM_MESSAGE, "error %X", r);
                     DrawDialogOK(MEM_MESSAGE);
@@ -4835,7 +4854,6 @@ int launch_iso_build(char *iso_path, char *src_path, bool run_showtime)
             }
 
             sprintf(TEMP_PATH, "/dev_bdvd/%s", name);
-
             if(run_showtime) launch_video(TEMP_PATH);
         }
 
@@ -6098,7 +6116,7 @@ int file_manager(char *pathw1, char *pathw2)
         if(set_menu2)
         {
             int py = 0;
-            int max_menu2 = 8;
+            int max_menu2 = 8; bool is_dir=false;
             if((!fm_pane && (path1[1] == 0)) || (fm_pane && (path2[1] == 0))) max_menu2 = 6;
             else if(!fm_pane &&
                     (strcmp(path1, "/dev_hdd0/game") == SUCCESS ||
@@ -6118,6 +6136,8 @@ int file_manager(char *pathw1, char *pathw2)
                      (strstr(path2, "/PS3ISO")  != NULL &&
                      (!strcmpext(entries2[sel2].d_name, ".iso") || !strcmpext(entries2[sel2].d_name, ".iso.0")))
                    )) max_menu2 = 9;
+            else if( (!fm_pane && use_cobra && (entries1[sel1].d_type & IS_DIRECTORY) && strstr(path1, "/dev_bdvd")==NULL && !is_ntfs_path(path1))   ||
+                     ( fm_pane && use_cobra && (entries2[sel2].d_type & IS_DIRECTORY) && strstr(path2, "/dev_bdvd")==NULL && !is_ntfs_path(path2)) ) {max_menu2 = 9; is_dir=true;}
 
             DrawBox((848 - 224)/2, (512 - (24 * max_menu2 + 1))/2 - 20 - 20, 0, 224, (24 * max_menu2 + 1) + 40, GRAY);
             DrawBox((848 - 216)/2, (512 - (24 * (max_menu2 + 1)))/2 - 20, 0, 216, (24 * (max_menu2 + 1)), POPUPMENUCOLOR);
@@ -6176,8 +6196,10 @@ int file_manager(char *pathw1, char *pathw2)
 
                 display_ttf_string(0, py, "Get file/folder Info",  (set_menu2 == 8 && (frame & BLINK)) ? INVISIBLE : WHITE, 0, 16, 24); py += 24;
 
-                if(max_menu2 >= 9)
-                    display_ttf_string(0, py, "Fix Game",          (set_menu2 == 9 && (frame & BLINK)) ? INVISIBLE : WHITE, 0, 16, 24); py += 24;
+                if(is_dir)
+                    {display_ttf_string(0, py, "Mount Folder",     (set_menu2 == 9 && (frame & BLINK)) ? INVISIBLE : WHITE, 0, 16, 24); py += 24;}
+                else if(max_menu2 >= 9)
+                    {display_ttf_string(0, py, "Fix Game",         (set_menu2 == 9 && (frame & BLINK)) ? INVISIBLE : WHITE, 0, 16, 24); py += 24;}
             }
         }
         else
@@ -6212,7 +6234,7 @@ int file_manager(char *pathw1, char *pathw2)
             if(new_pad & BUTTON_START) break;
             else if(new_pad & BUTTON_CIRCLE_)
             {
-                if(DrawDialogYesNo("Exit to XMB?") == YES) exit(0);
+                if(DrawDialogYesNo("Exit to XMB?") == YES) {fun_exit(); SaveGameList(); exit(0);}
                 new_pad = 0;
             }
         }
@@ -6234,26 +6256,28 @@ int file_manager(char *pathw1, char *pathw2)
 
         if(set_menu2)
         {
-            int max_menu2 = 8;
+            int max_menu2 = 8; bool is_dir=false;
             if((!fm_pane && (path1[1] == 0)) || (fm_pane && (path2[1] == 0))) max_menu2 = 6;
             else if(!fm_pane &&
-                    (strcmp(path1, "/dev_hdd0/game") == 0 ||
+                    (strcmp(path1, "/dev_hdd0/game") == SUCCESS ||
                      strstr(path1, "/GAME") != NULL ||
-                     strcmp(entries1[sel1].d_name, "game") == 0 ||
-                     strcmp(entries1[sel1].d_name, "GAMES") == 0 ||
-                     strcmp(entries1[sel1].d_name, "GAMEZ") == 0 ||
+                     strcmp(entries1[sel1].d_name, "game") == SUCCESS ||
+                     strcmp(entries1[sel1].d_name, "GAMES") == SUCCESS ||
+                     strcmp(entries1[sel1].d_name, "GAMEZ") == SUCCESS ||
                      (strstr(path1, "/PS3ISO") != NULL &&
-                     (!strcmpext(entries1[sel1].d_name, ".iso") || !strcmpext(entries1[sel1].d_name, ".iso.0"))
-                    ))) max_menu2 = 9;
+                     (!strcmpext(entries1[sel1].d_name, ".iso") || !strcmpext(entries1[sel1].d_name, ".iso.0")))
+                   )) max_menu2 = 9;
             else if(fm_pane &&
-                    (strcmp(path2, "/dev_hdd0/game") == 0 ||
+                    (strcmp(path2, "/dev_hdd0/game") == SUCCESS ||
                      strstr(path2, "/GAME") != NULL ||
-                     strcmp(entries2[sel2].d_name, "game") == 0 ||
-                     strcmp(entries2[sel2].d_name, "GAMES") == 0 ||
-                     strcmp(entries2[sel2].d_name, "GAMEZ") == 0 ||
-                     (strstr(path2, "/PS3ISO") != NULL &&
-                     (!strcmpext(entries2[sel2].d_name, ".iso") || !strcmpext(entries2[sel2].d_name, ".iso.0"))
-                   ))) max_menu2 = 9;
+                     strcmp(entries2[sel2].d_name, "game") == SUCCESS ||
+                     strcmp(entries2[sel2].d_name, "GAMES") == SUCCESS ||
+                     strcmp(entries2[sel2].d_name, "GAMEZ") == SUCCESS ||
+                     (strstr(path2, "/PS3ISO")  != NULL &&
+                     (!strcmpext(entries2[sel2].d_name, ".iso") || !strcmpext(entries2[sel2].d_name, ".iso.0")))
+                   )) max_menu2 = 9;
+            else if( (!fm_pane && (entries1[sel1].d_type & IS_DIRECTORY) && strstr(path1, "/dev_bdvd")==NULL && !is_ntfs_path(path1))   ||
+                     ( fm_pane && (entries2[sel2].d_type & IS_DIRECTORY) && strstr(path2, "/dev_bdvd")==NULL && !is_ntfs_path(path2)) ) {max_menu2 = 9; is_dir=true;}
 
             if(new_pad & BUTTON_UP)
                 ROT_DEC(set_menu2, 1, max_menu2)
@@ -6931,12 +6955,23 @@ int file_manager(char *pathw1, char *pathw2)
             } // Getfile / folder info
             else if(set_menu2 == 9 && max_menu2 >= 9)
             {
-                 // fix game
+                 // Fix game / Mount folder
                  if(!fm_pane)
                     sprintf(temp_buffer, "%s/%s", path1, entries1[sel1].d_name);
                  else
                     sprintf(temp_buffer, "%s/%s", path2, entries2[sel2].d_name);
 
+                 if(is_dir)
+                 {
+                     sys_map_path("/app_home", temp_buffer);
+                     sys_map_path("/dev_bdvd", temp_buffer);
+
+                     if(!fm_pane)
+                        {strcpy(path1, "/dev_bdvd\0"); nentries1 = pos1 = sel1 = 0;}
+                     else
+                        {strcpy(path2, "/dev_bdvd\0"); nentries2 = pos2 = sel2 = 0;}
+                 }
+                 else
                  if(strcasecmp(temp_buffer + strlen(temp_buffer) - 4, ".iso")   == SUCCESS ||
                     strcasecmp(temp_buffer + strlen(temp_buffer) - 6, ".iso.0") == SUCCESS)
                  {
@@ -7336,7 +7371,36 @@ int file_manager(char *pathw1, char *pathw2)
                         sprintf(TEMP_PATH, "%s/%s", path1, entries1[sel1].d_name);
                         if(edit_title_param_sfo(TEMP_PATH) == SUCCESS) exitcode = REFRESH_GAME_LIST;
                     }
-                    else if(!options_locked && !(entries1[sel1].d_type & IS_MARKED) && strcasecmp(ext, ".pkg") == SUCCESS)
+                    else if(!options_locked && !(entries1[sel1].d_type & IS_MARKED) && (use_cobra && !use_mamba) && strstr(entries1[sel1].d_name, "webftp_server")!=NULL && (strcasecmp(ext, ".sprx") == SUCCESS))
+                    {
+                        sprintf(TEMP_PATH, "%s/%s", path1, entries1[sel1].d_name);
+
+                        bool reboot=false; int size; char *boot_plugins = LoadFile("/dev_hdd0/boot_plugins.txt", &size);
+
+                        if(size>=36 && strstr(boot_plugins, "/dev_hdd0/plugins/webftp_server.sprx")!=NULL)
+                        {
+                            if(file_exists("/dev_hdd0/plugins/webftp_server.sprx"))
+                            {
+                                unlink_secure("/dev_hdd0/plugins/webftp_server.sprx");
+                                CopyFile(TEMP_PATH, "/dev_hdd0/webftp_server.sprx"); reboot=true;
+                            }
+                        }
+                        else
+                        if(size>=28 && strstr(boot_plugins, "/dev_hdd0/webftp_server.sprx")!=NULL)
+                        {
+                            sprintf(TEMP_PATH, "%s/%s", path1, entries1[sel1].d_name);
+                            if(file_exists("/dev_hdd0/webftp_server.sprx"))
+                            {
+                                unlink_secure("/dev_hdd0/webftp_server.sprx");
+                                CopyFile(TEMP_PATH, "/dev_hdd0/webftp_server.sprx"); reboot=true;
+                            }
+                        }
+
+                        if(boot_plugins) free(boot_plugins);
+                        if(reboot) sys_reboot();
+
+                    }
+                    else if(!options_locked && (selcount1>1 || !(entries1[sel1].d_type & IS_MARKED)) && strcasecmp(ext, ".pkg") == SUCCESS)
                     {
                         if (old_pad & BUTTON_SELECT)
                         {
@@ -7344,9 +7408,21 @@ int file_manager(char *pathw1, char *pathw2)
                             hex_editor(HEX_EDIT_FILE, TEMP_PATH, entries1_size[sel1]);
                             continue;
                         }
+                        else if(selcount1 > 1)
+                        {
+                            for(int r = 0; r < nentries1; r++)
+                            {
+                                if((entries1[r].d_type & IS_MARKED) && strcasestr(entries1[r].d_name, ".pkg")!=NULL)
+                                {
+                                    install_pkg(path1, entries1[r].d_name, 0);
+                                }
+                            }
+                            nentries1 = selcount1 = 0; frame = 300; //force immediate refresh
+                        }
                         else
                         {
-                            install_pkg(path1, entries1[sel1].d_name);
+                            install_pkg(path1, entries1[sel1].d_name, 1);
+
                             sprintf(TEMP_PATH, "%s/%s", path1, entries1[sel1].d_name);
                             if(file_exists(TEMP_PATH) == false)
                             {
@@ -7845,7 +7921,36 @@ int file_manager(char *pathw1, char *pathw2)
                         sprintf(TEMP_PATH, "%s/%s", path2, entries2[sel2].d_name);
                         if(edit_title_param_sfo(TEMP_PATH) == SUCCESS) exitcode = REFRESH_GAME_LIST;
                     }
-                    else if(!options_locked && !(entries2[sel2].d_type & IS_MARKED) && strcasecmp(ext, ".pkg") == SUCCESS)
+                    else if(!options_locked && !(entries2[sel2].d_type & IS_MARKED) && (use_cobra && !use_mamba) && strstr(entries2[sel2].d_name, "webftp_server")!=NULL && (strcasecmp(ext, ".sprx") == SUCCESS))
+                    {
+                        sprintf(TEMP_PATH, "%s/%s", path2, entries2[sel2].d_name);
+
+                        bool reboot=false; int size; char *boot_plugins = LoadFile("/dev_hdd0/boot_plugins.txt", &size);
+
+                        if(size>=36 && strstr(boot_plugins, "/dev_hdd0/plugins/webftp_server.sprx")!=NULL)
+                        {
+                            if(file_exists("/dev_hdd0/plugins/webftp_server.sprx"))
+                            {
+                                unlink_secure("/dev_hdd0/plugins/webftp_server.sprx");
+                                CopyFile(TEMP_PATH, "/dev_hdd0/webftp_server.sprx"); reboot=true;
+                            }
+                        }
+                        else
+                        if(size>=28 && strstr(boot_plugins, "/dev_hdd0/webftp_server.sprx")!=NULL)
+                        {
+                            sprintf(TEMP_PATH, "%s/%s", path2, entries2[sel2].d_name);
+                            if(file_exists("/dev_hdd0/webftp_server.sprx"))
+                            {
+                                unlink_secure("/dev_hdd0/webftp_server.sprx");
+                                CopyFile(TEMP_PATH, "/dev_hdd0/webftp_server.sprx"); reboot=true;
+                            }
+                        }
+
+                        if(boot_plugins) free(boot_plugins);
+                        if(reboot) sys_reboot();
+
+                    }
+                    else if(!options_locked && (selcount2>1 || !(entries2[sel2].d_type & IS_MARKED)) && strcasecmp(ext, ".pkg") == SUCCESS)
                     {
                         if (old_pad & BUTTON_SELECT)
                         {
@@ -7853,9 +7958,21 @@ int file_manager(char *pathw1, char *pathw2)
                             hex_editor(HEX_EDIT_FILE, TEMP_PATH, entries2_size[sel2]);
                             continue;
                         }
+                        else if(selcount2 > 1)
+                        {
+                            for(int r = 0; r < nentries2; r++)
+                            {
+                                if((entries2[r].d_type & IS_MARKED) && strcasestr(entries2[r].d_name, ".pkg")!=NULL)
+                                {
+                                    install_pkg(path2, entries2[r].d_name, 0);
+                                }
+                            }
+                            nentries2 = selcount2 = 0; frame = 300; //force immediate refresh
+                        }
                         else
                         {
-                            install_pkg(path2, entries2[sel2].d_name);
+                            install_pkg(path2, entries2[sel2].d_name, 1);
+
                             sprintf(TEMP_PATH, "%s/%s", path2, entries2[sel2].d_name);
                             if(file_exists(TEMP_PATH) == false)
                             {

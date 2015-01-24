@@ -2856,7 +2856,13 @@ void LoadPSXOptions(char *path)
     {   // get psx options by default
         if(mem) free(mem);
 
-        sprintf(tmp_path, "%s/config/psx_config.bin", self_path);
+        sprintf(tmp_path, "%s/USRDIR/psx_config.bin", self_path);
+
+        if(file_exists(tmp_path)==false)
+        {
+            sprintf(tmp_path, "%s/config/psx_config.bin", self_path);
+        }
+
         if(!file_exists(tmp_path)) return;
 
         if(path) psx_modified = true;
@@ -2871,6 +2877,8 @@ int SavePSXOptions(char *path)
 {
     psx_modified = false;
 
+    sprintf(temp_buffer, "%s/USRDIR/psx_config.bin", self_path);
+
     if(path)
     {
         int flen = strlen(path) - 4;
@@ -2883,7 +2891,7 @@ int SavePSXOptions(char *path)
             strcpy(temp_buffer + flen, ".cfg");
         }
     }
-    else
+    else if(file_exists(temp_buffer)==false)
         sprintf(temp_buffer, "%s/config/psx_config.bin", self_path);
 
     return SaveFile(temp_buffer, (char *) &psx_options, sizeof(psx_opt));

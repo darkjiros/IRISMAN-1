@@ -54,7 +54,7 @@ int NTFS_UnMount_dev(int id, char * name);
 void NTFS_UnMountAll(void);
 int NTFS_Test_Device(char *name);
 
-void install_pkg(char *path, char *filename);
+void install_pkg(char *path, char *filename, u8 show_done);
 
 bool is_retro_file(char *rom_path, char *rom_file);
 void launch_retro(char *rom_path);

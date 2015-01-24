@@ -75,7 +75,7 @@ static int compare(const void *va, const void *vb)
     else return 1;
 }
 
-void install_pkg(char *path, char *filename);
+void install_pkg(char *path, char *filename, u8 show_done);
 
 extern int set_install_pkg;
 
@@ -311,10 +311,10 @@ void draw_pkginstall(float x, float y)
                 if(is_hdd)
                 {
                     autolist = 12;nentries = 0;
-                    install_pkg(path_hdd, entries[sel].name);
+                    install_pkg(path_hdd, entries[sel].name, 1);
                 }
                 else
-                    install_pkg(path_name, entries[sel].name);
+                    install_pkg(path_name, entries[sel].name, 1);
             }
         }
         else if(new_pad & BUTTON_UP)
@@ -344,7 +344,7 @@ int build_pkg(char *path, char *title, char *path_icon, u64 size);
 int use_folder = 0;
 char pkg_folder[2][16]= {"game_pkg", "task"};
 
-void install_pkg(char *path, char *filename)
+void install_pkg(char *path, char *filename, u8 show_done)
 {
     u32 blockSize;
     u64 freeSize;
@@ -354,7 +354,7 @@ void install_pkg(char *path, char *filename)
     char string1[] = "80000000";
     int free_slot = -1;
 
-    int is_ntfs = 0; if(!strncmp(path, "/ntfs", 5) || !strncmp(path, "/ext", 4)) is_ntfs = 1;
+    bool is_ntfs = is_ntfs_path(path);
 
     if(firmware == 0x341C || firmware == 0x355C || firmware == 0x355D) use_folder = 1;
 
@@ -375,7 +375,7 @@ void install_pkg(char *path, char *filename)
 
     sprintf(temp_buffer + 1024, "%s\n\n%s", language[PKG_WANTINSTALL], filename);
 
-    if(DrawDialogYesNo(temp_buffer + 1024) != YES) return;
+    if(show_done && (DrawDialogYesNo(temp_buffer + 1024) != YES)) return;
 
 //    sys8_perm_mode(1);
 
@@ -487,7 +487,7 @@ void install_pkg(char *path, char *filename)
         if(firmware == 0x341C || firmware == 0x355C || firmware == 0x355D) set_install_pkg=1;
     }
 
-    DrawDialogOK(language[GAMECPYSL_DONE]);
+    if(show_done) DrawDialogOK(language[GAMECPYSL_DONE]);
 }
 
 unsigned char data_pdb[112] = {
@@ -740,7 +740,13 @@ int copy_async(char *path1, char *path2, u64 size, char *progress_string1, char 
     u64 pos = 0ULL;
     u64 pos2 = 0ULL;
 
-    int is_ntfs = 0; if(!strncmp(path1, "/ntfs", 5) || !strncmp(path1, "/ext", 4)) is_ntfs = 1;
+    if(!strncmp(path1, "/dev_hdd0", 9) && !strncmp(path2, "/dev_hdd0", 9))
+    {
+        sysLv2FsUnlink(path2);
+        return sysLv2FsLink(path1, path2);
+    }
+
+    bool is_ntfs = is_ntfs_path(path1);
 
     int alternate = 0;
     char *mem= malloc(0x20000);
@@ -798,11 +804,15 @@ int copy_async(char *path1, char *path2, u64 size, char *progress_string1, char 
             t_read.size = size - pos; if(t_read.size > 0x10000ULL) t_read.size = 0x10000ULL;
             t_read.usrdata = (u64 ) &async_data;
 
-            if(!is_ntfs) {
-                if(sysFsAioRead(&t_read, &id_r, fast_func_read) != 0) {
+            if(!is_ntfs)
+            {
+                if(sysFsAioRead(&t_read, &id_r, fast_func_read) != 0)
+                {
                     ret= -4; goto error;
                 }
-            } else {
+            }
+            else
+            {
                 int rd =ps3ntfs_read(fdr, &mem[alternate*0x10000], (size_t) t_read.size);
                 if(rd < 0 || rd != (int)t_read.size) async_data.readed = -1;
                 else async_data.readed = (s64) rd;

@@ -388,9 +388,7 @@ bool load_ps3_mamba_payload()
         exit(0);
     }
 
-    int n;
-
-    for(n = 0; n < 2000; n++)
+    for(int n = 0; n < 100; n++)
     {
         lv2poke(lv2_mem, lv2_mem + 0x8ULL);
         sys8_memcpy(lv2_mem + 8, (u64) addr, out_size);

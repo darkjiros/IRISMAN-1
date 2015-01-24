@@ -1174,3 +1174,23 @@ char *build_blank_iso(char *title_id)
     free(buf);
     return ret;
 }
+
+#define SYSCALL8_OPCODE_MAP_PATHS			0x7964
+int sys_map_path(char *oldpath, char *newpath);
+int sys_map_path(char *oldpath, char *newpath)
+{
+#if 1
+	lv2syscall2(35, (u64)oldpath, (u64)newpath);
+#else
+	char *paths[1]={NULL}; char *new_paths[1]={NULL};
+	paths[0]=oldpath;new_paths[0]=newpath;
+	lv2syscall4(8, SYSCALL8_OPCODE_MAP_PATHS, (u64)paths, (u64)new_paths, 1);
+#endif
+	return_to_user_prog(s32);
+}
+
+int sys_map_paths(char *paths[], char *new_paths[], unsigned int num)
+{
+	lv2syscall4(8, SYSCALL8_OPCODE_MAP_PATHS, (u64)paths, (u64)new_paths, num);
+	return_to_user_prog(s32);
+}

@@ -1768,14 +1768,23 @@ void SaveManagerCfg()
     manager_cfg.filter_by_device = filter_by_device;
     manager_cfg.filter_by_letter = filter_by_letter;
 
-    sprintf(tmp_path, "%s/config/manager_setup.bin", self_path);
+    sprintf(tmp_path, "%s/USRDIR/manager_setup.bin", self_path);
+    if(file_exists(tmp_path)==false)
+    {
+        sprintf(tmp_path, "%s/config/manager_setup.bin", self_path);
+    }
+
     SaveFile(tmp_path, (char *) &manager_cfg, sizeof(manager_cfg));
 }
 #endif
 
 void LoadManagerCfg()
 {
-    sprintf(tmp_path, "%s/config/manager_setup.bin", self_path);
+    sprintf(tmp_path, "%s/USRDIR/manager_setup.bin", self_path);
+    if(file_exists(tmp_path)==false)
+    {
+        sprintf(tmp_path, "%s/config/manager_setup.bin", self_path);
+    }
 
     int file_size;
     char *file = LoadFile(tmp_path, &file_size);
