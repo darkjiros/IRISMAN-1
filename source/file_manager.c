@@ -7400,6 +7400,12 @@ int file_manager(char *pathw1, char *pathw2)
                         if(reboot) sys_reboot();
 
                     }
+                    else if(!options_locked && !(entries1[sel1].d_type & IS_MARKED) && (use_cobra || use_mamba) && (strcasecmp(ext, ".sprx") == SUCCESS))
+                    {
+                        cobra_unload_vsh_plugin(6);
+                        sprintf(TEMP_PATH, "%s/%s", path1, entries1[sel1].d_name);
+                        cobra_load_vsh_plugin(6, TEMP_PATH, NULL, 0);
+                    }
                     else if(!options_locked && (selcount1>1 || !(entries1[sel1].d_type & IS_MARKED)) && strcasecmp(ext, ".pkg") == SUCCESS)
                     {
                         if (old_pad & BUTTON_SELECT)
@@ -7949,6 +7955,12 @@ int file_manager(char *pathw1, char *pathw2)
                         if(boot_plugins) free(boot_plugins);
                         if(reboot) sys_reboot();
 
+                    }
+                    else if(!options_locked && !(entries2[sel2].d_type & IS_MARKED) && (use_cobra || use_mamba) && (strcasecmp(ext, ".sprx") == SUCCESS))
+                    {
+                        cobra_unload_vsh_plugin(6);
+                        sprintf(TEMP_PATH, "%s/%s", path2, entries2[sel2].d_name);
+                        cobra_load_vsh_plugin(6, TEMP_PATH, NULL, 0);
                     }
                     else if(!options_locked && (selcount2>1 || !(entries2[sel2].d_type & IS_MARKED)) && strcasecmp(ext, ".pkg") == SUCCESS)
                     {

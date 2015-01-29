@@ -72,6 +72,8 @@ typedef struct {
 #define FS_S_IFMT 0170000
 #define FS_S_IFDIR 0040000
 
+#define S_ISDIR(m)	(((m)&_IFMT) == _IFDIR)
+
 //#define PSDEBUG 1
 
 #define SC_SYS_POWER 					(379)

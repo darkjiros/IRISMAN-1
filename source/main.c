@@ -142,6 +142,9 @@ bool install_mamba = true;
 bool signal_ntfs_mount = false;
 bool force_ntfs_mount  = false;
 
+#define MAX_NTFS_RETRY 20
+u8 ntfs_retry = MAX_NTFS_RETRY; // max number of tries to read the ntfs folders if there are 0 entries in the game list
+
 u64 restore_syscall8[2] = {0,0};
 
 #define NETHOST "<NETHOST>"
@@ -894,13 +897,34 @@ int get_icon(char * path, const int num_dir)
             sprintf(path, "%s%s_COV.JPG", retro_covers_path, directories[num_dir].title_id);
             if(file_exists(path)) return cover_type;
 
-            if(parse_iso_titleid(directories[num_dir].path_name, titleid) == SUCCESS)
+            if(strstr(directories[num_dir].path_name, "/PSXGAMES"))
             {
-                sprintf(path, "%s%s_COV.JPG", retro_covers_path, titleid);
-                if(file_exists(path))
+                sprintf(path, "%s/cover.jpg", directories[num_dir].path_name);
+                if(file_exists(path)) return 2;
+                sprintf(path, "%s/cover.png", directories[num_dir].path_name);
+                if(file_exists(path)) return 2;
+                sprintf(path, "%s/Cover.jpg", directories[num_dir].path_name);
+                if(file_exists(path)) return 2;
+                sprintf(path, "%s/Cover.png", directories[num_dir].path_name);
+                if(file_exists(path)) return 2;
+                sprintf(path, "%s/COVER.JPG", directories[num_dir].path_name);
+                if(file_exists(path)) return 2;
+                sprintf(path, "%s/COVER.PNG", directories[num_dir].path_name);
+                if(file_exists(path)) return 2;
+            }
+            else
+            {
+                int n = strlen(directories[num_dir].path_name)-4;
+                if(n<0 || strcasestr(".iso|.bin|.mdf|.img",directories[num_dir].path_name+n)==NULL) ; // skip parse title
+                else
+                if(parse_iso_titleid(directories[num_dir].path_name, titleid) == SUCCESS)
                 {
-                    strcpy(directories[num_dir].title_id, titleid);
-                    return cover_type;
+                    sprintf(path, "%s%s_COV.JPG", retro_covers_path, titleid);
+                    if(file_exists(path))
+                    {
+                        strcpy(directories[num_dir].title_id, titleid);
+                        return cover_type;
+                    }
                 }
             }
 
@@ -4648,7 +4672,7 @@ s32 main(s32 argc, const char* argv[])
             {   // mount device
                 NTFS_UnMount(i);
                 mounts[i] = NULL;
-                mountCount[i] = 0;
+                mountCount[i] = 0; ntfs_retry = MAX_NTFS_RETRY;
 
                 mountCount[i] = ntfsMountDevice(disc_ntfs[i], &mounts[i], NTFS_DEFAULT | NTFS_RECOVER);
 
@@ -4664,7 +4688,7 @@ s32 main(s32 argc, const char* argv[])
             { // unmount device
                NTFS_UnMount(i);
                mounts[i] = NULL;
-               mountCount[i] = 0;
+               mountCount[i] = 0; ntfs_retry = MAX_NTFS_RETRY;
             }
         }
         // NTFS Automount
@@ -5027,9 +5051,9 @@ skip_bdvd:
                 if(mountCount[find_device]) ports_plug_cnt|= 1<<find_device; else ports_plug_cnt&= ~(1<<find_device);
             }
 
-            if(force_ntfs_mount || old_ntfs_ports != ports_plug_cnt || forcedevices || ndirectories == 0 || (signal_force && filter_by_device == LIST_ALL_DEVICES))
+            if(force_ntfs_mount || old_ntfs_ports != ports_plug_cnt || forcedevices || (ndirectories == 0 && ntfs_retry > 0) || (signal_force && filter_by_device == LIST_ALL_DEVICES))
             {
-                force_ntfs_mount=false;
+                force_ntfs_mount=false; if(ntfs_retry>0) ntfs_retry--;
 
                 if(filter_by_device > BDVD_DEVICE) forcedevices = 0;
 
@@ -9222,7 +9246,7 @@ ask_delete_item:
             game_list_category = GAME_LIST_ALL;
             mode_favourites = 0;
 
-            force_ntfs_mount = true; frame_count = 62;
+            force_ntfs_mount = true; frame_count = 62; ntfs_retry = MAX_NTFS_RETRY;
             for(int i=0;i<8;i++) automountCount[i] = 2;
         }
         else if(old_pad & BUTTON_L2)
@@ -9263,7 +9287,7 @@ ask_delete_item:
         }
         else
         {   // [R3] = Select next game list
-            force_ntfs_mount = true; frame_count = 62;
+            force_ntfs_mount = true; frame_count = 62; ntfs_retry = MAX_NTFS_RETRY;
             for(int i=0;i<8;i++) automountCount[i] = 2;
 
             read_settings();
@@ -9323,7 +9347,7 @@ void return_to_game_list(bool update)
         fdevices ^= forcedevices;
         save_game_list_after_refresh = true;
 
-        force_ntfs_mount = true;
+        force_ntfs_mount = true; ntfs_retry = MAX_NTFS_RETRY;
         for(int i=0;i<8;i++) automountCount[i] = 2;
 
         load_gamecfg(RESET_GAME_INFO); // force refresh game info
@@ -12536,7 +12560,7 @@ void draw_gamelist_options(float x, float y)
 
         bXMLScanOnlyNetGames = true;
 
-        force_ntfs_mount = true; frame_count = 62;
+        force_ntfs_mount = true; frame_count = 62; ntfs_retry = MAX_NTFS_RETRY;
         for(int i=0;i<8;i++) automountCount[i] = 2;
 
         filter_by_device = opt_filter_by_device;

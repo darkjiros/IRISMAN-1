@@ -86,6 +86,8 @@ static void single_bar(char *caption)
 
 int param_sfo_app_ver(char * path, char *app_ver)
 {
+    if(is_ntfs_path(path)) return -1;
+
     s32 fd;
     u64 bytes;
     u64 position = 0LL;

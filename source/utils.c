@@ -324,33 +324,21 @@ int DrawDialogYesNo2(char * str)
 
 char * LoadFile(char *path, int *file_size)
 {
-    FILE *fp;
+    *file_size = (int)get_filesize(path);
+
+    if(!is_ntfs_path(path)) sysLv2FsChmod(path, FS_S_IFMT | 0777);
+
+    if(*file_size==0) return NULL;
+
     char *mem = NULL;
+    mem = malloc(*file_size); if(!mem) return NULL;
 
-    *file_size = 0;
+    int fd = ps3ntfs_open(path, O_RDONLY, 0777);
 
-    sysLv2FsChmod(path, FS_S_IFMT | 0777);
-
-    fp = fopen(path, "rb");
-
-    if (fp != NULL)
+    if(fd >= 0)
     {
-        fseek(fp, 0, SEEK_END);
-
-        *file_size = ftell(fp);
-
-        mem = malloc(*file_size);
-
-        if(!mem) {fclose(fp); return NULL;}
-
-        fseek(fp, 0, SEEK_SET);
-
-        if(*file_size != fread((void *) mem, 1, *file_size, fp))
-        {
-            fclose(fp); *file_size = 0;
-            free(mem); return NULL;
-        }
-        fclose(fp);
+        ps3ntfs_read(fd, mem, *file_size);
+        ps3ntfs_close(fd);
     }
 
     return mem;
@@ -360,23 +348,19 @@ int SaveFile(char *path, char *mem, int file_size)
 {
     unlink_secure(path);
 
-    FILE *fp;
+    int fd = ps3ntfs_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 
-    fp = fopen(path, "wb");
-
-    if (fp)
+    if(fd >= 0)
     {
-        if(file_size != fwrite((void *) mem, 1, file_size, fp))
+        if(ps3ntfs_write(fd, (void *) mem, file_size)!=file_size)
         {
-            fclose(fp);
+            ps3ntfs_close(fd);
             return FAILED;
         }
-        fclose(fp);
+        ps3ntfs_close(fd);
     }
-    else
-        return FAILED;
 
-    sysLv2FsChmod(path, FS_S_IFMT | 0777);
+    if(!is_ntfs_path(path)) sysLv2FsChmod(path, FS_S_IFMT | 0777);
 
     return SUCCESS;
 }
@@ -981,6 +965,8 @@ int mem_parse_param_sfo(u8 *mem, u32 len, char *field, char *value)
 
 int parse_iso_titleid(char * path_iso, char * title_id)
 {
+    if(get_filesize(path_iso) < 0x9320LL) return -2;
+
     Lv2FsFile fd;
     u64 bytes;
     u64 position = 0LL;
@@ -997,9 +983,7 @@ int parse_iso_titleid(char * path_iso, char * title_id)
 
     if(is_ntfs)
     {
-        sysLv2FsChmod(path_iso, FS_S_IFMT | 0777);
-
-        int fd = ps3ntfs_open(path_iso, O_RDONLY, 0);
+        int fd = ps3ntfs_open(path_iso, O_RDONLY, 0777);
         if(fd >= SUCCESS)
         {
             if(ps3ntfs_seek64(fd, 0x9320LL, SEEK_SET) != 0x9320LL) {ps3ntfs_close(fd); return -2;}
@@ -1015,6 +999,7 @@ int parse_iso_titleid(char * path_iso, char * title_id)
     }
     else
     {
+        sysLv2FsChmod(path_iso, FS_S_IFMT | 0777);
         n = sysLv2FsOpen(path_iso, 0, &fd, S_IREAD | S_IRGRP | S_IROTH, NULL, 0);
 
         if(!n)
@@ -1287,6 +1272,8 @@ extern int firmware;
 
 int patch_exe_error_09(char *path_exe)
 {
+    if(is_ntfs_path(path_exe)) return 0;
+
     u16 fw_421 = 42100;
     u16 fw_466 = 46600;
     u32 offset_fw;
@@ -1298,7 +1285,7 @@ int patch_exe_error_09(char *path_exe)
     int file = -1;
     int flag = 0; //not patched
 
-    if(!is_ntfs_path(path_exe)) sysLv2FsChmod(path_exe, FS_S_IFMT | 0777);
+    sysLv2FsChmod(path_exe, FS_S_IFMT | 0777);
 
     // open self/sprx and changes the fw version
     ret = sysLv2FsOpen( path_exe, SYS_O_RDWR, &file, 0, NULL, 0 );
@@ -1759,7 +1746,7 @@ bool add_homebrew_icon(t_directories *list, int *max, char *title_id, char *spat
                 sprintf(list[*max].path_name, filepath);
 
                 sprintf(list[*max].title, title_name);
-                (*max) ++;
+                if(list[*max].title[0]) (*max) ++;
                 return true;
             }
         }
@@ -1909,56 +1896,58 @@ void fill_psx_iso_entries_from_device(char *path, u32 flag, t_directories *list,
 {
     if(*max >= MAX_DIRECTORIES) return;
 
-    DIR  *dir;
+    sysFSDirent dir;
+    DIR_ITER *pdir = NULL;
+    struct stat st;
 
-    dir = opendir(path);
-    if(dir)
+    bool is_ntfs = is_ntfs_path((char *) path);
+
+    if(!is_ntfs) sysFsChmod(path, FS_S_IFDIR | 0777);
+
+    pdir = ps3ntfs_diropen(path); if(!pdir) return;
+
+    while(ps3ntfs_dirnext(pdir, dir.d_name, &st) == SUCCESS)
     {
-        while(true)
+        if(*max >= MAX_DIRECTORIES) break;
+
+        if(dir.d_name[0]=='.' && (dir.d_name[1]==0 || dir.d_name[1]=='.')) continue;
+
+        ps3pad_poll();
+        if((old_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE)) || (new_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE))) break;
+
+        if(!S_ISDIR(st.st_mode)) continue;
+
+        if(filter_by_letter)
         {
-            if(*max >= MAX_DIRECTORIES) break;
+           char c1[1], c2[1]; sprintf(c1, "%c", dir.d_name[0]); sprintf(c2, "%c", (47 + filter_by_letter)); if(strcasecmp(c1, c2)) continue;
+        }
 
-            struct dirent *entry = readdir(dir);
+        list[*max].flags = flag | PS1_FLAG;
+        list[*max].splitted = 0;
 
-            if(!entry) break;
+        sprintf(list[*max].path_name, "%s/%s", path, dir.d_name);
 
-            if(entry->d_name[0] == '.' && (entry->d_name[1] == 0 || entry->d_name[1] == '.')) continue;
+        dir.d_name[63]=0;
+        sprintf(list[*max].title, "%s", dir.d_name);
+        sprintf(list[*max].title_id, "%s", dir.d_name);
 
-            ps3pad_poll();
-            if((old_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE)) || (new_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE))) break;
+        if(!(flag & HDD0_FLAG))
+        {
+            // is not HDD
+            char file2[0x420];
 
-            if(!(entry->d_type & DT_DIR)) continue;
-
-            if(filter_by_letter)
+            sprintf(file2, "%s/VM1/%s/Internal_MC.VM1", self_path, list[*max].title);
+            if(file_exists(file2))
             {
-                char c1[1], c2[1]; sprintf(c1, "%c", entry->d_name[0]); sprintf(c2, "%c", (47 + filter_by_letter)); if(strcasecmp(c1, c2)) continue;
-            }
+                u64 size = get_filesize(file2);
 
-            list[*max].flags = flag  | PS1_FLAG;
-
-            strncpy(list[*max].title, entry->d_name, 63);
-            list[*max].title[63] = 0;
-
-            strncpy(list[*max].title_id, entry->d_name, 63);
-            list[*max].title_id[63] = 0;
-
-            sprintf(list[*max].path_name, "%s/%s", path, entry->d_name);
-            list[*max].splitted = 0;
-
-            if(!(flag & HDD0_FLAG))
-            {
-                // is not HDD
-                struct stat s;
-                char file2[0x420];
-                char file3[0x420];
-
-                sprintf(file2, "%s/VM1/%s/Internal_MC.VM1", self_path, list[*max].title);
-                sprintf(file3, "%s/Internal_MC.VM1", list[*max].path_name);
-
-                if(stat(file2, &s) >= 0)
+                if(size > 0 && file_exists(list[*max].path_name))
                 {
+                    char file3[0x420];
+                    sprintf(file3, "%s/Internal_MC.VM1", list[*max].path_name);
                     unlink_secure(file3);
-                    if(copy_async_gbl(file2, file3, s.st_size, "Copying Memory Card to USB device...", NULL) < 0)
+
+                    if(copy_async_gbl(file2, file3, size, "Copying Memory Card to USB device...", NULL) < 0)
                     {
                         unlink_secure(file3); // delete possible truncated file
                         DrawDialogOK("Error copying the Memory Card to USB device");
@@ -1969,398 +1958,397 @@ void fill_psx_iso_entries_from_device(char *path, u32 flag, t_directories *list,
                     rmdir_secure(file2);
                 }
             }
-
-            (*max) ++;
         }
 
-        closedir(dir);
+        if(list[*max].title[0]) (*max) ++;
     }
+
+    ps3ntfs_dirclose(pdir);
 }
 
 int fill_iso_entries_from_device(char *path, u32 flag, t_directories *list, int *max, unsigned long ioType)
 {
     if(*max >= MAX_DIRECTORIES) return 0;
 
-    DIR  *dir;
     char *mem = malloc(1024);
 
     if(!mem) return 0;
 
-    dir = opendir(path);
-    if(dir)
+    bool is_ps3_iso = (strstr(path, "/PS3ISO")!=NULL);
+    bool is_psx_iso = (strstr(path, "/PSXISO")!=NULL);
+    bool is_psp_iso = (strstr(path, "/PSPISO")!=NULL);
+    bool is_ps2_iso = (strstr(path, "/PS2ISO")!=NULL);
+
+    bool is_bd_iso  = (strstr(path, "/BDISO" )!=NULL);
+    bool is_dvd_iso = (strstr(path, "/DVDISO")!=NULL);
+
+    bool is_psp = (flag & (PSP_FLAG | RETRO_FLAG)) == (PSP_FLAG | RETRO_FLAG);
+    bool is_retro = is_psp && strlen(retro_root_path) > 0 && (strstr(path, retro_root_path) != NULL);
+    bool is_ps2_classic = is_psp && !is_retro &&
+                          (strlen(ps2classic_path) > 0 && strstr(path, ps2classic_path) != NULL);
+
+    char wm_path[0x420];
+    bool use_wmtmp =  file_exists("/dev_hdd0/tmp/wmtmp");
+    bool use_wmtmp_ps3 = ( use_wmtmp && is_ps3_iso );
+
+
+    sysFSDirent dir;
+    DIR_ITER *pdir = NULL;
+    struct stat st;
+
+    bool is_ntfs = is_ntfs_path((char *) path);
+
+    pdir = ps3ntfs_diropen(path); if(!pdir) return (*max);
+
+    if(!is_ntfs) sysFsChmod(path, FS_S_IFDIR | 0777);
+
+    while(ps3ntfs_dirnext(pdir, dir.d_name, &st) == SUCCESS)
     {
-        bool is_ps3_iso = (strstr(path, "/PS3ISO")!=NULL);
-        bool is_psx_iso = (strstr(path, "/PSXISO")!=NULL);
-        bool is_psp_iso = (strstr(path, "/PSPISO")!=NULL);
-        bool is_ps2_iso = (strstr(path, "/PS2ISO")!=NULL);
+        if(*max >= MAX_DIRECTORIES) break;
 
-        bool is_bd_iso  = (strstr(path, "/BDISO" )!=NULL);
-        bool is_dvd_iso = (strstr(path, "/DVDISO")!=NULL);
+        if(dir.d_name[0]=='.' && (dir.d_name[1]==0 || dir.d_name[1]=='.')) continue;
 
-        bool is_psp = (flag & (PSP_FLAG | RETRO_FLAG)) == (PSP_FLAG | RETRO_FLAG);
-        bool is_retro = is_psp && strlen(retro_root_path) > 0 && (strstr(path, retro_root_path) != NULL);
-        bool is_ps2_classic = is_psp && !is_retro &&
-                              (strlen(ps2classic_path) > 0 && strstr(path, ps2classic_path) != NULL);
+        ps3pad_poll();
+        if((old_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE)) || (new_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE))) break;
 
-        char wm_path[0x420];
-        bool use_wmtmp =  file_exists("/dev_hdd0/tmp/wmtmp");
-        bool use_wmtmp_ps3 = ( use_wmtmp && is_ps3_iso );
 
-        while(true)
+        if(S_ISDIR(st.st_mode))
         {
-            if(*max >= MAX_DIRECTORIES) break;
+            if(is_retro) continue;
 
-            struct dirent *entry = readdir(dir);
+            int len = strlen(path);
+            strcat(path,"/");
+            strcat(path, dir.d_name);
+            fill_iso_entries_from_device(path, flag, list, max, ioType);
+            path[len] = 0;
+            continue;
+        }
 
-            if(!entry) break;
+        if(is_retro)
+        {
+            if(roms_count >= max_roms) break;
+            if(!is_retro_file(path, dir.d_name)) continue;
+        }
+        else if(flag & (D_FLAG_HOMEB))
+        {
+            if(is_audiovideo(get_extension(dir.d_name)) == false &&
+               strcmpext(dir.d_name, ".iso") && strcmpext(dir.d_name, ".iso.0")) continue;
+        }
+        else if(is_ps2_classic)
+        {
+            if(strcmpext(dir.d_name, ".bin.enc")) continue;
+        }
+        else if((flag & (PSP_FLAG)) == (PSP_FLAG))
+        {
+            if(strcmpext(dir.d_name, ".iso")     && strcmpext(dir.d_name, ".ISO")) continue;
+        }
+        else if(flag & (PS1_FLAG))
+        {
+            int flen = strlen(dir.d_name) - 4;
 
-            if(entry->d_name[0] == '.' && (entry->d_name[1] == 0 || entry->d_name[1] == '.')) continue;
+            if(flen < 0 || strcasestr(".iso|.bin|.mdf|.img", dir.d_name + flen) == NULL) continue;
+        }
+        else if(strcmpext(dir.d_name, ".iso")   && strcmpext(dir.d_name, ".iso.0")) continue;
 
-            ps3pad_poll();
-            if((old_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE)) || (new_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE)))
+        sprintf(list[*max].path_name, "%s/%s", path, dir.d_name);
+
+        char name[0x420];
+
+        if(is_ps3_iso) list[*max].flags = flag | PS3_FLAG;
+        else if(is_psx_iso || ((flag & (ISO_FLAGS)) == (PS1_FLAG))) list[*max].flags = flag | (PS1_FLAG);
+        else if(is_retro) {list[*max].flags = flag | (RETRO_FLAG); roms_count++;}
+        else if(is_ps2_classic) list[*max].flags = flag | (PS2_CLASSIC_FLAG);
+        else if(is_psp || is_psp_iso) list[*max].flags = flag | (PSP_FLAG);
+        else if(flag & (D_FLAG_HOMEB)) list[*max].flags = flag;
+        else if(is_ps2_iso) list[*max].flags = flag | PS2_FLAG;
+        else
+        {
+            int fd = ps3ntfs_open(list[*max].path_name, O_RDONLY, 0777);
+            if(fd >= SUCCESS)
             {
-                if(is_retro) break;
-                break;
-            }
+                if(ps3ntfs_seek64(fd, 0x810LL, SEEK_SET) != 0x810LL) {ps3ntfs_close(fd); continue;}
+                if(ps3ntfs_read(fd, (void *) mem + 256, 10)<10) continue;
+                mem[256 + 10] = 0;
 
-            if(entry->d_type & DT_DIR)
-            {
-                if(is_retro) continue;
+                if(ps3ntfs_seek64(fd, 0x8000LL, SEEK_SET) != 0x8000LL) {ps3ntfs_close(fd); continue;}
+                if(ps3ntfs_read(fd, (void *) mem + 256, 256)<256) continue;
 
-                int len = strlen(path);
-                strcat(path,"/");
-                strcat(path, entry->d_name);
-                fill_iso_entries_from_device(path, flag, list, max, ioType);
-                path[len] = 0;
-                continue;
-            }
+                if(ps3ntfs_seek64(fd, 0x9320LL, SEEK_SET) != 0x9320LL) {ps3ntfs_close(fd); continue;}
+                if(ps3ntfs_read(fd, (void *) mem + 512, 256)<256) continue;
 
-            if(is_retro)
-            {
-                if(roms_count >= max_roms) break;
-                if(!is_retro_file(path, entry->d_name)) continue;
-            }
-            else if(flag & (D_FLAG_HOMEB))
-            {
-                if(is_audiovideo(get_extension(entry->d_name)) == false &&
-                   strcmpext(entry->d_name, ".iso") && strcmpext(entry->d_name, ".iso.0")) continue;
-            }
-            else if(is_ps2_classic)
-            {
-                if(strcmpext(entry->d_name, ".bin.enc")) continue;
-            }
-            else if((flag & (PSP_FLAG)) == (PSP_FLAG))
-            {
-                if(strcmpext(entry->d_name, ".iso")     && strcmpext(entry->d_name, ".ISO")) continue;
-            }
-            else if(flag & (PS1_FLAG))
-            {
-                int flen = entry->d_namlen - 4;
+                ps3ntfs_close(fd);
 
-                if(flen < 0 || strcasestr(".iso|.bin|.mdf|.img", entry->d_name + flen) == NULL) continue;
-            }
-            else if(strcmpext(entry->d_name, ".iso")   && strcmpext(entry->d_name, ".iso.0")) continue;
-
-            sprintf(list[*max].path_name, "%s/%s", path, entry->d_name);
-
-            char name[0x420];
-
-            if(is_ps3_iso) list[*max].flags = flag | PS3_FLAG;
-            else if(is_psx_iso || ((flag & (ISO_FLAGS)) == (PS1_FLAG))) list[*max].flags = flag | (PS1_FLAG);
-            else if(is_retro) {list[*max].flags = flag | (RETRO_FLAG); roms_count++;}
-            else if(is_ps2_classic) list[*max].flags = flag | (PS2_CLASSIC_FLAG);
-            else if(is_psp || is_psp_iso) list[*max].flags = flag | (PSP_FLAG);
-            else if(flag & (D_FLAG_HOMEB)) list[*max].flags = flag;
-            else if(is_ps2_iso) list[*max].flags = flag | PS2_FLAG;
-            else
-            {
-                FILE *fp = fopen(list[*max].path_name, "rb");
-
-                if(fp)
+                if(!memcmp((void *) &mem[0x28], "PS3VOLUME", 9)) list[*max].flags = flag | PS3_FLAG;
+                else if(!memcmp((void *) &mem[8], "PLAYSTATION", 11) || !memcmp((void *) &mem[512], "PLAYSTATION", 11))
                 {
-                    fseek(fp, 0x810, SEEK_SET);
-                    fread((void *) mem + 256, 1, 10, fp); // read PS3 disc iD
-                    mem[256 + 10] = 0;
-                    fseek(fp, 0x8000, SEEK_SET);
-                    fread((void *) mem, 1, 256, fp);
-
-                    fseek(fp, 0x9320, SEEK_SET);
-
-                    fread((void *) mem + 512, 1, 256, fp);
-                    fclose(fp);
-
-                    if(!memcmp((void *) &mem[0x28], "PS3VOLUME", 9)) list[*max].flags = flag | PS3_FLAG;
-                    else if(!memcmp((void *) &mem[8], "PLAYSTATION", 11) || !memcmp((void *) &mem[512], "PLAYSTATION", 11))
-                    {
-                        list[*max].flags = flag | PS2_FLAG;
-                        if(!memcmp((void *) &mem[8], "PLAYSTATION", 11)) memcpy((void *) mem + 256, (void *) &mem[0x28], 10);
-                        else memcpy((void *) mem + 256, (void *) &mem[0x220], 10);
-                        mem[266] = 0;
-                    }
-                    else continue;
-
+                    list[*max].flags = flag | PS2_FLAG;
+                    if(!memcmp((void *) &mem[8], "PLAYSTATION", 11)) memcpy((void *) mem + 256, (void *) &mem[0x28], 10);
+                    else memcpy((void *) mem + 256, (void *) &mem[0x220], 10);
+                    mem[266] = 0;
                 }
                 else continue;
+
             }
+            else continue;
+        }
 
-            strcpy(name, entry->d_name);
+        strcpy(name, dir.d_name);
 
-            // remove file extension
-            if(!strcmpext(name, ".iso.0"))
-                name[strlen(name) - 6] = 0;
-            else if(is_ps2_classic && !strcmpext(name, ".bin.enc"))
-                name[strlen(name) - 8] = 0;
-            else if(strlen(name) > 5 && name[strlen(name) - 5] == '.')
-                name[strlen(name) - 5] = 0;  // .????
-            else if(strlen(name) > 3 && name[strlen(name) - 3] == '.')
-                name[strlen(name) - 3] = 0;  // .??
-            else if(strlen(name) > 4)
-                name[strlen(name) - 4] = 0;  // ISO/MKV/MP4/MP3/AVI/MPG/FLV/WMV/ASF/etc.
+        // remove file extension
+        if(!strcmpext(name, ".iso.0"))
+            name[strlen(name) - 6] = 0;
+        else if(is_ps2_classic && !strcmpext(name, ".bin.enc"))
+            name[strlen(name) - 8] = 0;
+        else if(strlen(name) > 5 && name[strlen(name) - 5] == '.')
+            name[strlen(name) - 5] = 0;  // .????
+        else if(strlen(name) > 3 && name[strlen(name) - 3] == '.')
+            name[strlen(name) - 3] = 0;  // .??
+        else if(strlen(name) > 4)
+            name[strlen(name) - 4] = 0;  // ISO/MKV/MP4/MP3/AVI/MPG/FLV/WMV/ASF/etc.
 
-            if(is_ps2_classic && strcmp(name, "ISO")==0)
+        if(is_ps2_classic && strcmp(name, "ISO")==0)
+        {
+            if(strstr(path, "[PS2"))
+                strcpy(name, strstr(path, "[PS2"));
+            else if(strstr(path, "PS2ISO/"))
+                strcpy(name, strstr(path, "PS2ISO/")+7);
+
+            for(u16 p=strlen(name); p>0; p--) if(name[p]=='/') name[p]=0;
+        }
+
+        // cache ICON0 and SFO for webMAN
+        if(use_wmtmp_ps3)
+        {
+            sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.PNG", name);
+            if(file_exists(wm_path)==false)
+              ExtractFileFromISO(list[*max].path_name, "/PS3_GAME/ICON0.PNG;1", wm_path);
+            sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.SFO", name);
+            if(file_exists(wm_path)==false)
+              ExtractFileFromISO(list[*max].path_name, "/PS3_GAME/PARAM.SFO;1", wm_path);
+        }
+        else if(use_wmtmp && (is_psx_iso || is_dvd_iso || is_bd_iso))
+        {
+            sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.jpg", name);
+            if(file_exists(wm_path)==false)
             {
-                if(strstr(path, "[PS2"))
-                    strcpy(name, strstr(path, "[PS2"));
-                else if(strstr(path, "PS2ISO/"))
-                    strcpy(name, strstr(path, "PS2ISO/")+7);
-
-                for(u16 p=strlen(name); p>0; p--) if(name[p]=='/') name[p]=0;
-            }
-
-            // cache ICON0 and SFO for webMAN
-            if(use_wmtmp_ps3)
-            {
-                sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.PNG", name);
-                if(file_exists(wm_path)==false)
-                  ExtractFileFromISO(list[*max].path_name, "/PS3_GAME/ICON0.PNG;1", wm_path);
-                sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.SFO", name);
-                if(file_exists(wm_path)==false)
-                  ExtractFileFromISO(list[*max].path_name, "/PS3_GAME/PARAM.SFO;1", wm_path);
-            }
-            else if(use_wmtmp && (is_psx_iso || is_dvd_iso || is_bd_iso))
-            {
-                sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.jpg", name);
+                char image_file[0x420];
+                sprintf(image_file, "%s/%s.jpg", path, name);
+                CopyFile(image_file, wm_path);
                 if(file_exists(wm_path)==false)
                 {
-                    char image_file[0x420];
-                    sprintf(image_file, "%s/%s.jpg", path, name);
+                    sprintf(image_file, "%s/%s.JPG", path, name);
                     CopyFile(image_file, wm_path);
                     if(file_exists(wm_path)==false)
                     {
-                        sprintf(image_file, "%s/%s.JPG", path, name);
+                        sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.PNG", name);
+                        sprintf(image_file, "%s/%s.png", path, name);
                         CopyFile(image_file, wm_path);
                         if(file_exists(wm_path)==false)
                         {
-                            sprintf(wm_path, "/dev_hdd0/tmp/wmtmp/%s.PNG", name);
-                            sprintf(image_file, "%s/%s.png", path, name);
+                            sprintf(image_file, "%s/%s.PNG", path, name);
                             CopyFile(image_file, wm_path);
-                            if(file_exists(wm_path)==false)
-                            {
-                                sprintf(image_file, "%s/%s.PNG", path, name);
-                                CopyFile(image_file, wm_path);
-                            }
                         }
                     }
                 }
             }
-
-            if(use_cobra && is_ntfs_path(path) && (is_ps3_iso || is_psx_iso || is_dvd_iso || is_bd_iso))
-            {
-                if(is_ps3_iso) sprintf(extension, "%s", "PS3ISO");
-                if(is_psx_iso) sprintf(extension, "%s", "PSXISO");
-                if(is_dvd_iso) sprintf(extension, "%s", "DVDISO");
-                if(is_bd_iso ) sprintf(extension, "%s", "BDISO" );
-
-                sprintf(ntfs_path, "/dev_hdd0/tmp/wmtmp/%s.ntfs[%s]", name, extension);
-                if(file_exists(ntfs_path)==false)
-                {
-                    snprintf(ntfs_path, 0x420, "%s/%s", path, entry->d_name);
-
-                    if(file_exists(ntfs_path)==false) goto cont;
-
-                    parts = ps3ntfs_file_to_sectors(ntfs_path, sections, sections_size, MAX_SECTIONS, 1);
-
-                    if (parts == MAX_SECTIONS)
-                    {
-                        goto cont;
-                    }
-                    else if (parts > 0)
-                    {
-                        uint8_t plugin_args[0x10000];
-
-                        num_tracks = 1;
-                        if(is_ps3_iso) emu_mode = EMU_PS3; else
-                        if(is_bd_iso ) emu_mode = EMU_BD;  else
-                        if(is_dvd_iso) emu_mode = EMU_DVD; else
-                        if(is_psx_iso)
-                        {
-                            emu_mode = EMU_PSX;
-                            cue=0;
-                            int fd;
-                            ntfs_path[strlen(ntfs_path)-3]='C'; ntfs_path[strlen(ntfs_path)-2]='U'; ntfs_path[strlen(ntfs_path)-1]='E';
-                            fd = ps3ntfs_open(ntfs_path, O_RDONLY, 0);
-                            if(fd<0)
-                            {
-                                ntfs_path[strlen(ntfs_path)-3]='c'; ntfs_path[strlen(ntfs_path)-2]='u'; ntfs_path[strlen(ntfs_path)-1]='e';
-                                fd = ps3ntfs_open(ntfs_path, O_RDONLY, 0);
-                            }
-
-                            if(fd >= 0)
-                            {
-                                int r = ps3ntfs_read(fd, (char *)cue_buf, sizeof(cue_buf));
-                                ps3ntfs_close(fd);
-
-                                if (r > 0)
-                                {
-                                    char dummy[64];
-
-                                    if (cobra_parse_cue(cue_buf, r, tracks, 100, &num_tracks, dummy, sizeof(dummy)-1) != 0)
-                                    {
-                                        num_tracks=1;
-                                        cue=0;
-                                    }
-                                    else
-                                        cue=1;
-                                }
-                            }
-                        }
-
-                        p_args = (rawseciso_args *)plugin_args; memset(p_args, 0, 0x10000);
-                        p_args->device = USB_MASS_STORAGE((ioType & 0xff) - '0');
-                        p_args->emu_mode = emu_mode;
-                        p_args->num_sections = parts;
-
-                        memcpy(plugin_args+sizeof(rawseciso_args), sections, parts*sizeof(uint32_t));
-                        memcpy(plugin_args+sizeof(rawseciso_args)+(parts*sizeof(uint32_t)), sections_size, parts*sizeof(uint32_t));
-
-                        if (emu_mode == EMU_PSX)
-                        {
-                            int max = MAX_SECTIONS - ((num_tracks*sizeof(ScsiTrackDescriptor)) / 8);
-
-                            if (parts == max)
-                            {
-                                continue;
-                            }
-
-                            p_args->num_tracks = num_tracks;
-                            scsi_tracks = (ScsiTrackDescriptor *)(plugin_args+sizeof(rawseciso_args)+(2*parts*sizeof(uint32_t)));
-
-                            if (!cue)
-                            {
-                                scsi_tracks[0].adr_control = 0x14;
-                                scsi_tracks[0].track_number = 1;
-                                scsi_tracks[0].track_start_addr = 0;
-                            }
-                            else
-                            {
-                                for (u8 j = 0; j < num_tracks; j++)
-                                {
-                                    scsi_tracks[j].adr_control = (tracks[j].is_audio) ? 0x10 : 0x14;
-                                    scsi_tracks[j].track_number = j+1;
-                                    scsi_tracks[j].track_start_addr = tracks[j].lba;
-                                }
-                            }
-                        }
-
-                        FILE *flistW;
-                        sprintf(ntfs_path, "/dev_hdd0/tmp/wmtmp/%s.ntfs[%s]", name, extension);
-                        flistW = fopen(ntfs_path, "wb");
-                        if(flistW!=NULL)
-                        {
-                            fwrite(plugin_args, sizeof(plugin_args), 1, flistW);
-                            fclose(flistW);
-                            sysFsChmod(ntfs_path, 0666);
-                        }
-                    }
-                }
-            }
-cont:
-            strncpy(list[*max].title, name, 63);
-            list[*max].title[63] = 0;
-            list[*max].title_id[0] = 0;
-            list[*max].title_id[12] = 0;
-
-            if(flag & (D_FLAG_HOMEB))
-            {
-                strncpy(list[*max ].title_id, name, 63); // for BD/DVD/MKV
-            }
-            else if(list[*max].flags & (PS1_FLAG))
-            {   // PS2/PS1/PSP
-                if(is_psp) goto parse_param_sfo;
-                if(is_ps2_classic) goto read_next_file;
-
-                parse_iso_titleid(list[*max].path_name, list[*max].title_id);
-            }
-            else
-            {
-parse_param_sfo:
-                if(is_psp)
-                    strncpy(list[*max].title_id, mem + 0x373, 63);
-                else
-                    strncpy(list[*max].title_id, mem + 256, 63);
-
-                sysLv2FsChmod(list[*max].path_name, FS_S_IFMT | 0777);
-
-                list[*max].title_id[0] = 0;
-
-                int fd = ps3ntfs_open(list[*max].path_name, O_RDONLY, 0);
-                if(fd >= SUCCESS)
-                {
-                    u32 flba;
-                    u64 size;
-                    int re;
-                    char *mem = NULL;
-
-                    if(is_psp)
-                        re = get_iso_file_pos(fd, "/PSP_GAME/PARAM.SFO", &flba, &size);
-                    else
-                        re = get_iso_file_pos(fd, "/PS3_GAME/PARAM.SFO;1", &flba, &size);
-
-                    if(!re && (mem = malloc(size + 16)) != NULL)
-                    {
-                        memset(mem, 0, size + 16);
-
-                        re = ps3ntfs_read(fd, (void *) mem, size);
-
-                        if(re == size)
-                        {
-                            if(is_psp)
-                            {
-                                if(mem_parse_param_sfo((u8 *) mem, size, "DISC_ID", list[*max].title_id) == SUCCESS) list[*max].title_id[12] = 0;
-                                if(mem_parse_param_sfo((u8 *) mem, size, "TITLE",   list[*max].title   ) == SUCCESS)
-                                {
-                                    if(!strncmp(list[*max].title, "Patched & Uploaded", 18)) strncpy(list[*max].title, name, 63);
-                                }
-                            }
-                            else
-                            {
-                                if(mem_parse_param_sfo((u8 *) mem, size, "TITLE_ID", list[*max].title_id) == SUCCESS) list[*max].title_id[12] = 0;
-                                if(mem_parse_param_sfo((u8 *) mem, size, "TITLE",    list[*max].title   ) == SUCCESS) list[*max].title[63] = 0;
-                            }
-                        }
-                        free(mem);
-                    }
-                    ps3ntfs_close(fd);
-                }
-            }
-
-read_next_file:
-
-            if(filter_by_letter)
-            {
-                char c1[1], c2[1]; sprintf(c1, "%c", list[*max].title[0]); sprintf(c2, "%c", (47 + filter_by_letter)); if(strcasecmp(c1, c2)) continue;
-            }
-
-
-            list[*max].title_id[63] = 0;
-            list[*max].splitted = 0;
-
-            (*max) ++;
-            if(*max >= MAX_DIRECTORIES) break;
         }
 
-        closedir(dir);
+        if(use_cobra && is_ntfs && (is_ps3_iso || is_psx_iso || is_dvd_iso || is_bd_iso))
+        {
+            if(is_ps3_iso) sprintf(extension, "%s", "PS3ISO");
+            if(is_psx_iso) sprintf(extension, "%s", "PSXISO");
+            if(is_dvd_iso) sprintf(extension, "%s", "DVDISO");
+            if(is_bd_iso ) sprintf(extension, "%s", "BDISO" );
+
+            sprintf(ntfs_path, "/dev_hdd0/tmp/wmtmp/%s.ntfs[%s]", name, extension);
+            if(file_exists(ntfs_path)==false)
+            {
+                snprintf(ntfs_path, 0x420, "%s/%s", path, dir.d_name);
+
+                if(file_exists(ntfs_path)==false) goto cont;
+
+                parts = ps3ntfs_file_to_sectors(ntfs_path, sections, sections_size, MAX_SECTIONS, 1);
+
+                if (parts == MAX_SECTIONS)
+                {
+                    goto cont;
+                }
+                else if (parts > 0)
+                {
+                    uint8_t plugin_args[0x10000];
+
+                    num_tracks = 1;
+                    if(is_ps3_iso) emu_mode = EMU_PS3; else
+                    if(is_bd_iso ) emu_mode = EMU_BD;  else
+                    if(is_dvd_iso) emu_mode = EMU_DVD; else
+                    if(is_psx_iso)
+                    {
+                        emu_mode = EMU_PSX;
+                        cue=0;
+                        int fd;
+                        ntfs_path[strlen(ntfs_path)-3]='C'; ntfs_path[strlen(ntfs_path)-2]='U'; ntfs_path[strlen(ntfs_path)-1]='E';
+                        fd = ps3ntfs_open(ntfs_path, O_RDONLY, 0);
+                        if(fd<0)
+                        {
+                            ntfs_path[strlen(ntfs_path)-3]='c'; ntfs_path[strlen(ntfs_path)-2]='u'; ntfs_path[strlen(ntfs_path)-1]='e';
+                            fd = ps3ntfs_open(ntfs_path, O_RDONLY, 0);
+                        }
+
+                        if(fd >= 0)
+                        {
+                            int r = ps3ntfs_read(fd, (char *)cue_buf, sizeof(cue_buf));
+                            ps3ntfs_close(fd);
+
+                            if (r > 0)
+                            {
+                                char dummy[64];
+
+                                if (cobra_parse_cue(cue_buf, r, tracks, 100, &num_tracks, dummy, sizeof(dummy)-1) != 0)
+                                {
+                                    num_tracks=1;
+                                    cue=0;
+                                }
+                                else
+                                    cue=1;
+                            }
+                        }
+                    }
+
+                    p_args = (rawseciso_args *)plugin_args; memset(p_args, 0, 0x10000);
+                    p_args->device = USB_MASS_STORAGE((ioType & 0xff) - '0');
+                    p_args->emu_mode = emu_mode;
+                    p_args->num_sections = parts;
+
+                    memcpy(plugin_args+sizeof(rawseciso_args), sections, parts*sizeof(uint32_t));
+                    memcpy(plugin_args+sizeof(rawseciso_args)+(parts*sizeof(uint32_t)), sections_size, parts*sizeof(uint32_t));
+
+                    if (emu_mode == EMU_PSX)
+                    {
+                        int max = MAX_SECTIONS - ((num_tracks*sizeof(ScsiTrackDescriptor)) / 8);
+
+                        if (parts == max)
+                        {
+                            continue;
+                        }
+
+                        p_args->num_tracks = num_tracks;
+                        scsi_tracks = (ScsiTrackDescriptor *)(plugin_args+sizeof(rawseciso_args)+(2*parts*sizeof(uint32_t)));
+
+                        if (!cue)
+                        {
+                            scsi_tracks[0].adr_control = 0x14;
+                            scsi_tracks[0].track_number = 1;
+                            scsi_tracks[0].track_start_addr = 0;
+                        }
+                        else
+                        {
+                            for (u8 j = 0; j < num_tracks; j++)
+                            {
+                                scsi_tracks[j].adr_control = (tracks[j].is_audio) ? 0x10 : 0x14;
+                                scsi_tracks[j].track_number = j+1;
+                                scsi_tracks[j].track_start_addr = tracks[j].lba;
+                            }
+                        }
+                    }
+
+                    FILE *flistW;
+                    sprintf(ntfs_path, "/dev_hdd0/tmp/wmtmp/%s.ntfs[%s]", name, extension);
+                    flistW = fopen(ntfs_path, "wb");
+                    if(flistW!=NULL)
+                    {
+                        fwrite(plugin_args, sizeof(plugin_args), 1, flistW);
+                        fclose(flistW);
+                        sysFsChmod(ntfs_path, 0666);
+                    }
+                }
+            }
+        }
+cont:
+        strncpy(list[*max].title, name, 63);
+        list[*max].title[63] = 0;
+        list[*max].title_id[0] = 0;
+        list[*max].title_id[12] = 0;
+
+        if(flag & (D_FLAG_HOMEB))
+        {
+            strncpy(list[*max ].title_id, name, 63); // for BD/DVD/MKV
+        }
+        else if(list[*max].flags & (PS1_FLAG))
+        {   // PS2/PS1/PSP
+            if(is_psp) goto parse_param_sfo;
+            if(is_ps2_classic) goto add_file_to_list;
+
+            parse_iso_titleid(list[*max].path_name, list[*max].title_id);
+        }
+        else
+        {
+parse_param_sfo:
+            if(is_psp)
+                strncpy(list[*max].title_id, mem + 0x373, 63);
+            else
+                strncpy(list[*max].title_id, mem + 256, 63);
+
+            sysLv2FsChmod(list[*max].path_name, FS_S_IFMT | 0777);
+
+            list[*max].title_id[0] = 0;
+
+            int fd = ps3ntfs_open(list[*max].path_name, O_RDONLY, 0);
+            if(fd >= SUCCESS)
+            {
+                u32 flba;
+                u64 size;
+                int re;
+                char *mem = NULL;
+
+                if(is_psp)
+                    re = get_iso_file_pos(fd, "/PSP_GAME/PARAM.SFO", &flba, &size);
+                else
+                    re = get_iso_file_pos(fd, "/PS3_GAME/PARAM.SFO;1", &flba, &size);
+
+                if(!re && (mem = malloc(size + 16)) != NULL)
+                {
+                    memset(mem, 0, size + 16);
+
+                    re = ps3ntfs_read(fd, (void *) mem, size);
+
+                    if(re == size)
+                    {
+                        if(is_psp)
+                        {
+                            if(mem_parse_param_sfo((u8 *) mem, size, "DISC_ID", list[*max].title_id) == SUCCESS) list[*max].title_id[12] = 0;
+                            if(mem_parse_param_sfo((u8 *) mem, size, "TITLE",   list[*max].title   ) == SUCCESS)
+                            {
+                                if(!strncmp(list[*max].title, "Patched & Uploaded", 18)) strncpy(list[*max].title, name, 63);
+                            }
+                        }
+                        else
+                        {
+                            if(mem_parse_param_sfo((u8 *) mem, size, "TITLE_ID", list[*max].title_id) == SUCCESS) list[*max].title_id[12] = 0;
+                            if(mem_parse_param_sfo((u8 *) mem, size, "TITLE",    list[*max].title   ) == SUCCESS) list[*max].title[63] = 0;
+                        }
+                    }
+                    free(mem);
+                }
+                ps3ntfs_close(fd);
+            }
+        }
+
+add_file_to_list:
+
+        if(filter_by_letter)
+        {
+            char c1[1], c2[1]; sprintf(c1, "%c", list[*max].title[0]); sprintf(c2, "%c", (47 + filter_by_letter)); if(strcasecmp(c1, c2)) continue;
+        }
+
+
+        list[*max].title_id[63] = 0;
+        list[*max].splitted = 0;
+
+        if(list[*max].title[0]) (*max) ++;
+        if(*max >= MAX_DIRECTORIES) break;
     }
+
+    ps3ntfs_dirclose(pdir);
 
     free(mem);
     return (*max);
@@ -2402,7 +2390,7 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
         strncpy(file, path, 0x420);
         n = 1; while(file[n] != '/' && file[n] != 0) n++;
 
-        file[n] = 0; strcat(file, "/PS3ISO");
+        file[n] = 0; strcat(file, "/PS3ISO\0");
 
         if(game_list_category == GAME_LIST_PS3_ONLY || game_list_category == GAME_LIST_ALL)
             fill_iso_entries_from_device(file, flag, list, max, 0);
@@ -2411,7 +2399,7 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
         {
             if(retro_mode == RETRO_ALL || retro_mode == RETRO_PSX || retro_mode == RETRO_PSALL)
             {
-                file[n] = 0; strcat(file, "/PSXISO");
+                file[n] = 0; strcat(file, "/PSXISO\0");
                 fill_iso_entries_from_device(file, flag | PS1_FLAG, list, max, 0);
             }
 
@@ -2427,7 +2415,7 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
                 {
                     if(!strncmp(file, "/dev_hdd0", 9))
                     {
-                        file[n] = 0; strcat(file, "/PS2ISO");
+                        file[n] = 0; strcat(file, "/PS2ISO\0");
                         fill_iso_entries_from_device(file, flag | PS2_FLAG, list, max, 0);
                     }
                 }
@@ -2436,11 +2424,11 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
                 {
                     if(strncmp(file, "/dev_hdd0", 9))
                     {
-                        file[n] = 0; strcat(file, "/ISO");
+                        file[n] = 0; strcat(file, "/ISO\0");
                         fill_iso_entries_from_device(file, flag | PSP_FLAG, list, max, 0);
                     }
 
-                    file[n] = 0; strcat(file, "/PSPISO");
+                    file[n] = 0; strcat(file, "/PSPISO\0");
                     fill_iso_entries_from_device(file, flag | PSP_FLAG, list, max, 0);
                 }
             }
@@ -2548,16 +2536,16 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
         strncpy(file, path, 0x420);
         n = 1; while(file[n] != '/' && file[n]!=0) n++;
 
-        file[n] = 0; strcat(file, "/BDISO");
+        file[n] = 0; strcat(file, "/BDISO\0");
         fill_iso_entries_from_device(file, D_FLAG_HOMEB | D_FLAG_HOMEB_BD | (flag  & GAMELIST_FILTER), list, max, 0);
 
-        file[n] = 0; strcat(file, "/DVDISO");
+        file[n] = 0; strcat(file, "/DVDISO\0");
         fill_iso_entries_from_device(file, D_FLAG_HOMEB | D_FLAG_HOMEB_DVD | (flag  & GAMELIST_FILTER), list, max, 0);
 
-        file[n] = 0; strcat(file, "/VIDEO");
+        file[n] = 0; strcat(file, "/VIDEO\0");
         fill_iso_entries_from_device(file, D_FLAG_HOMEB | D_FLAG_HOMEB_MKV | (flag  & GAMELIST_FILTER), list, max, 0);
 
-        file[n] = 0; strcat(file, "/MOVIES");
+        file[n] = 0; strcat(file, "/MOVIES\0");
         fill_iso_entries_from_device(file, D_FLAG_HOMEB | D_FLAG_HOMEB_MKV | (flag  & GAMELIST_FILTER), list, max, 0);
 
         file[n] = 0; strcat(file, video_path);
@@ -2574,73 +2562,8 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
         strncpy(file, path, 0x420);
         n = 1; while(file[n] != '/' && file[n] != 0)  n++;
 
-        file[n] = 0; strcat(file, "/PSXGAMES");
-
-
-        dir = opendir(file);
-        if(dir)
-        {
-            while(true)
-            {
-                if(*max >= MAX_DIRECTORIES) break;
-
-                struct dirent *entry = readdir(dir);
-
-                if(!entry) break;
-
-                if(entry->d_name[0] == '.' && (entry->d_name[1] == 0 || entry->d_name[1] == '.')) continue;
-
-                ps3pad_poll();
-                if((old_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE)) || (new_pad & (BUTTON_CIRCLE_ | BUTTON_TRIANGLE))) break;
-
-                if(!(entry->d_type & DT_DIR)) continue;
-
-                if(filter_by_letter)
-                {
-                    char c1[1], c2[1]; sprintf(c1, "%c", entry->d_name[0]); sprintf(c2, "%c", (47 + filter_by_letter)); if(strcasecmp(c1, c2)) continue;
-                }
-
-                list[*max].flags = flag | PS1_FLAG;
-
-                strncpy(list[*max].title, entry->d_name, 63);
-                list[*max].title[63] = 0;
-
-                strncpy(list[*max].title_id, entry->d_name, 63);
-                list[*max].title_id[63] = 0;
-
-                sprintf(list[*max].path_name, "%s/%s", file, entry->d_name);
-                list[*max].splitted = 0;
-
-                if(!(flag & HDD0_FLAG))
-                {
-                    // is not HDD
-                    struct stat s;
-                    char file2[0x420];
-                    char file3[0x420];
-
-                    sprintf(file2, "%s/VM1/%s/Internal_MC.VM1", self_path, list[*max].title);
-                    sprintf(file3, "%s/Internal_MC.VM1", list[*max].path_name);
-
-                    if(stat(file2, &s) >= 0)
-                    {
-                        unlink_secure(file3);
-                        if(copy_async(file2, file3, s.st_size, "Copying Memory Card to USB device...", NULL) < 0)
-                        {
-                            unlink_secure(file3); // delete possible truncated file
-                            DrawDialogOK("Error copying the Memory Card to USB device");
-                        }
-                        else unlink_secure(file2);
-
-                        sprintf(file2,"%s/VM1/%s", self_path, list[*max].title);
-                        rmdir_secure(file2);
-                    }
-                }
-
-                (*max) ++;
-            }
-
-            closedir(dir);
-        }
+        file[n] = 0; strcat(file, "/PSXGAMES\0");
+        fill_psx_iso_entries_from_device(file, flag, list, max);
 
         msgDialogAbort();
         msgDialogClose(0);
@@ -2656,7 +2579,12 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
 
     if(!(flag & BDVD_FLAG) && sel != HOMEBREW_MODE &&  game_list_category == GAME_LIST_HOMEBREW) return SUCCESS;
 
-    if(mode_homebrew == VIDEOS_MODE) return SUCCESS;
+    if(mode_homebrew == VIDEOS_MODE || is_ntfs_path(path))
+    {
+        msgDialogAbort();
+        msgDialogClose(0);
+        return SUCCESS;
+    }
 
     dir = opendir(path);
     if(!dir)
@@ -2762,7 +2690,7 @@ int fill_entries_from_device(char *path, t_directories *list, int *max, u32 flag
             char c1[1], c2[1]; sprintf(c1, "%c", list[*max].title[0]); sprintf(c2, "%c", (47 + filter_by_letter)); if(strcasecmp(c1, c2)) continue;
         }
 
-        (*max) ++;
+        if(list[*max].title[0]) (*max) ++;
     }
 
     closedir(dir);
@@ -5495,29 +5423,21 @@ void test_game(int game_sel)
 
 void DeleteDirectory(const char* path)
 {
-    int dfd;
-    u64 read;
     sysFSDirent dir;
     DIR_ITER *pdir = NULL;
     struct stat st;
 
     bool is_ntfs = is_ntfs_path((char *) path);
 
-    if ((!is_ntfs && sysLv2FsOpenDir(path, &dfd)) || (is_ntfs && (pdir = ps3ntfs_diropen(path)) == NULL))
-        return;
+    pdir = ps3ntfs_diropen(path); if(!pdir) return;
 
-    if (!is_ntfs) sysFsChmod(path, FS_S_IFDIR | 0777);
+    if(!is_ntfs) sysFsChmod(path, FS_S_IFDIR | 0777);
 
-    read = sizeof(sysFSDirent);
-    while ((!is_ntfs && !sysLv2FsReadDir(dfd, &dir, &read)) ||
-           (is_ntfs && ps3ntfs_dirnext(pdir, dir.d_name, &st) == 0))
+    while(ps3ntfs_dirnext(pdir, dir.d_name, &st) == SUCCESS)
     {
-        char newpath[0x440];
-        if(!is_ntfs && !read)
-            break;
-        if(!strcmp(dir.d_name, ".") || !strcmp(dir.d_name, ".."))
-            continue;
+        if(dir.d_name[0]=='.' && (dir.d_name[1]==0 || dir.d_name[1]=='.')) continue;
 
+        char newpath[0x440];
         strcpy(newpath, path);
         strcat(newpath, "/");
         strcat(newpath, dir.d_name);
@@ -5546,7 +5466,7 @@ void DeleteDirectory(const char* path)
         }
     }
 
-    if(is_ntfs) ps3ntfs_dirclose(pdir); else sysLv2FsCloseDir(dfd);
+    ps3ntfs_dirclose(pdir);
 }
 
 int FixDirectory(const char* path, int fcount)
@@ -5566,13 +5486,14 @@ int FixDirectory(const char* path, int fcount)
     }
 
     read = sizeof(sysFSDirent);
-    while (!sysLv2FsReadDir(dfd, &dir, &read) && (fcount >=0)) {
-        char newpath[0x440];
+    while (!sysLv2FsReadDir(dfd, &dir, &read) && (fcount >=0))
+    {
         if (!read)
             break;
         if (!strcmp(dir.d_name, ".") || !strcmp(dir.d_name, ".."))
             continue;
 
+        char newpath[0x440];
         strcpy(newpath, path);
         strcat(newpath, "/");
         strcat(newpath, dir.d_name);
